@@ -118,7 +118,7 @@ function App() {
             })
           ) : (
             <p>
-              {CPoints.length > 0 ? CPoints[0][0].toFixed(2) : ""},{" "}
+              {CPoints.length > 0 ? CPoints[0][0].toFixed(2)+", " : ""}{" "}
               {CPoints.length > 0 ? CPoints[0][1].toFixed(2) : ""}
             </p>
           )}
@@ -134,7 +134,7 @@ function App() {
           className="text-white flex gap-2 border-2 border-gray-800 hover:border-white cursor-pointer p-2 rounded-md"
           onClick={() => setCordex(true)}
         >
-          Activate Cordex <FlaskConicalIcon />
+          Use Cordex <FlaskConicalIcon />
         </button>
 
         <div

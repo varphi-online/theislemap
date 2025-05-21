@@ -711,7 +711,12 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
             ? "Stop Cordex"
             : "Start Cordex"}
         </button>
-        <img src="/example.png" className="h-20" alt="ONLY SELECT THE NUMERIC COMPONENTS OF LATITUDE AND LONGITUDE"/>
+        <ol>
+          <li>1. Screen capture "TheIsle" window</li>
+          <li>2. Click and drag to select the latitue and longitude coordinates like the image</li>
+          <li>3. Click "Start Cordex", then "X" to return to the main map.</li>
+        </ol>
+        <img src="/theislemap/example.png" className="h-20" alt="ONLY SELECT THE NUMERIC COMPONENTS OF LATITUDE AND LONGITUDE"/>
         </div>
         {/* <br /> */}
         {/* <br /> */}
