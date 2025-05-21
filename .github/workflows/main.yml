@@ -1,0 +1,68 @@
+# .github/workflows/deploy.yml
+
+name: Build and Deploy to GitHub Pages
+
+on:
+  # Triggers the workflow on push events to the main branch
+  push:
+    branches:
+      - main # Or your default branch (e.g., master)
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+# Sets permissions for the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy
+    runs-on: ubuntu-latest
+    # Specifies the GITHUB_TOKEN permissions for the job.
+    # This is required for the actions/deploy-pages action.
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x' # Specify your desired Node.js version
+          cache: 'npm' # Cache npm dependencies
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build application
+        # This command should generate static files in 'build/client/'
+        # IMPORTANT: For GitHub Pages, if your site is served from a subdirectory
+        # (e.g., https://<username>.github.io/<repository-name>/),
+        # your build configuration (e.g., Vite's `base` option in `vite.config.js`
+        # or `homepage` in `package.json`) must be set up correctly to handle
+        # the base path. React Router's `basename` prop might also need to be set.
+        run: npm run build
+
+      - name: Setup GitHub Pages
+        # Configures GitHub Pages to prepare for deployment
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        # Uploads the build output (static files from 'build/client/')
+        # to be deployed by GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Path to the directory containing the static assets to deploy
+          path: ./build/client
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        # Deploys the uploaded artifact to GitHub Pages
+        uses: actions/deploy-pages@v4
+        # The site will be available at the URL output by this step
