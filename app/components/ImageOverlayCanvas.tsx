@@ -460,7 +460,7 @@ const ImageOverlayCanvas: React.FC<ImageOverlayCanvasProps> = ({
       // Draw background images
       imageLoadData.elements.forEach((img) => {
         const imgNativeAspectRatio = img.height / img.width;
-        const actualImageWorldHeight = imageWorldWidth * imgNativeAspectRatio;
+        const actualImageWorldHeight = imageWorldWidth * imgNativeAspectRatio*.91;
         const imgWorldL = -imageWorldWidth / 2;
         const imgWorldR = imageWorldWidth / 2;
         const imgWorldT = -actualImageWorldHeight / 2;
@@ -614,6 +614,24 @@ const ImageOverlayCanvas: React.FC<ImageOverlayCanvasProps> = ({
     };
   }, [isDragging]);
 
+  useEffect(() => {
+    const canvasElement = canvasRef.current;
+    if (canvasElement) {
+      const wheelHandler = (e: WheelEvent) => {
+        e.preventDefault();
+        handleWheel(e as unknown as React.WheelEvent<HTMLCanvasElement>);
+      };
+      
+      // Add the event listener with passive: false
+      canvasElement.addEventListener("wheel", wheelHandler, { passive: false });
+
+      // Cleanup function to remove the event listener
+      return () => {
+        canvasElement.removeEventListener("wheel", wheelHandler);
+      };
+    }
+  }, [handleWheel]);
+
   return (
     <canvas
       ref={canvasRef}
@@ -621,13 +639,13 @@ const ImageOverlayCanvas: React.FC<ImageOverlayCanvasProps> = ({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUpOrLeave}
       onMouseLeave={handleMouseUpOrLeave}
-      onWheel={handleWheel}
       className=""
       style={{
         border: "1px solid black",
         cursor: "grab",
         touchAction: "none",
         backgroundColor: "#262b37", // Ensure this is the desired background for pulse visibility
+        height: initialHeight
       }}
     />
   );

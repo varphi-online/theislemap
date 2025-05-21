@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.14",
+    "@radix-ui/react-switch": "^1.2.5",
     "@react-router/node": "^7.5.3",
     "@react-router/serve": "^7.5.3",
     "class-variance-authority": "^0.7.1",
