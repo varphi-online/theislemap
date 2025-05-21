@@ -1,17 +1,17 @@
-import { reactRouter } from "@react-router/dev/vite";
-import tailwindcss from "@tailwindcss/vite";
-import { defineConfig } from "vite";
-import tsconfigPaths from "vite-tsconfig-paths";
-import path from "path";
+import path from "path"
+import tailwindcss from "@tailwindcss/vite"
+import react from "@vitejs/plugin-react"
+import { defineConfig } from "vite"
 
 const repositoryName = 'theislemap';
 
+// https://vite.dev/config/
 export default defineConfig(({command})=>{return {
-  plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
+  plugins: [react(), tailwindcss()],
   resolve: {
-      alias: {
-        "~": path.resolve(__dirname, "app"),
-      },
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
     },
+  },
   base: command === 'build' ? `/${repositoryName}/` : '/',
-}});
+}})

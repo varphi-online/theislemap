@@ -1,19 +1,12 @@
-import type { Route } from "./+types/home";
-import ImageOverlayCanvas from "~/components/ImageOverlayCanvas";
 import { useEffect, useState } from "react";
-import LiveNumericScreenOCR from "~/components/LiveNumericScreenOCR";
 
-import { ArrowRightIcon, Cpu, FlaskConicalIcon, Trash2Icon, X } from "lucide-react";
-import { Switch } from "~/components/ui/switch";
+import { ArrowRightIcon, FlaskConicalIcon, Trash2Icon, X } from "lucide-react";
+import { Switch } from "./components/ui/switch";
+import ImageOverlayCanvas from "./components/ImageOverlayCanvas";
+import LiveNumericScreenOCR from "./components/LiveNumericScreenOCR";
 
-export function meta({}: Route.MetaArgs) {
-  return [
-    { title: "New React Router App" },
-    { name: "description", content: "Welcome to React Router!" },
-  ];
-}
 
-export default function Home() {
+function App() {
   const [UPoints, setUPoints] = useState<Array<[number, number]>>([]);
   const [CPoints, setCPoints] = useState<Array<[number, number]>>([]);
   const [inp, setInp] = useState("");
@@ -162,3 +155,5 @@ export default function Home() {
     </div>
   );
 }
+
+export default App

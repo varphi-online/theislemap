@@ -68,7 +68,6 @@ const calculateMedianPoint = (
 };
 
 const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
-  numberTuples,
   setNumberTuples,
 }) => {
   const videoElementRef = useRef<HTMLVideoElement>(null);
@@ -76,7 +75,7 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
   const tesseractWorkerRef = useRef<Tesseract.Worker | null>(null);
   const animationFrameIdRef = useRef<number | null>(null);
   const lastOcrTimeRef = useRef<number>(0);
-  const [selectVisible, setSelectVisible] = useState(true);
+  const [selectVisible, __] = useState(true);
 
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [selection, setSelection] = useState<SelectionRect>({
@@ -90,11 +89,9 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
   });
   const [isLiveOcrActive, setIsLiveOcrActive] = useState(false);
   const [isOcrBusy, setIsOcrBusy] = useState(false);
-  const [statusText, setStatusText] = useState("Initializing...");
-  const [ocrResultText, setOcrResultText] = useState(
-    "No text recognized yet.",
-  );
-  const [ocrInterval, setOcrInterval] = useState(500);
+  const [_, setStatusText] = useState("Initializing...");
+
+  const [ocrInterval] = useState(500);
   const [allowSelectionDrawing, setAllowSelectionDrawing] = useState(false);
   const [ocrBuffer, setOcrBuffer] = useState<[number, number][]>([]);
   const [buttonsDisabled, setButtonsDisabled] = useState({
@@ -164,7 +161,6 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
       clearSelection: true,
       toggleLiveOcr: true,
     });
-    setOcrResultText("No text recognized yet.");
     setOcrBuffer([]);
     // Status will be set by initializeTesseractWorker or errors during it
   }, [stream, drawInitialCanvasContent]); // Removed setStream from deps, it's being set
@@ -243,9 +239,6 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
     }
 
     setIsOcrBusy(true);
-    if (!isLiveOcrActive) {
-      setOcrResultText("Processing selection...");
-    }
 
     const video = videoElementRef.current;
     if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
@@ -285,7 +278,6 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
       const recognizedText =
         (text as string | null)?.replaceAll("%", "8").replaceAll("£", "8") ||
         "(No numeric text found)";
-      setOcrResultText(recognizedText); // Update displayed OCR text
 
       const values = recognizedText.split("\n");
       if (values.length >= 2 && (values[0]?.length || 0) > 4) {
@@ -313,7 +305,6 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
       }
     } catch (err: any) {
       console.error("OCR Error:", err);
-      setOcrResultText(`OCR Error: ${err.message}`);
       if (isLiveOcrActive) {
         setStatusText("OCR failed. Retrying...");
       }
@@ -572,7 +563,7 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
     }));
   };
 
-  const handleCanvasMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleCanvasMouseUp = () => {
     if (!allowSelectionDrawing || !selection.isDefining || isLiveOcrActive)
       return;
     // Finalize selection based on current mouse position (already updated in selection state by mouseMove)
@@ -626,11 +617,6 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
     }
   };
 
-  const handleOcrIntervalChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    setOcrInterval(parseInt(e.target.value, 10));
-  };
 
   const styles: { [key: string]: CSSProperties } = {
     body: {
