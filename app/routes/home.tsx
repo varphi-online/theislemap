@@ -1,5 +1,4 @@
 import type { Route } from "./+types/home";
-import { Welcome } from "../welcome/welcome";
 import ImageOverlayCanvas from "~/components/ImageOverlayCanvas";
 import { useEffect, useState } from "react";
 import LiveNumericScreenOCR from "~/components/LiveNumericScreenOCR";

@@ -645,7 +645,8 @@ const ImageOverlayCanvas: React.FC<ImageOverlayCanvasProps> = ({
         cursor: "grab",
         touchAction: "none",
         backgroundColor: "#262b37", // Ensure this is the desired background for pulse visibility
-        height: initialHeight
+        height: "100vh",
+        width: "100vh"
       }}
     />
   );
