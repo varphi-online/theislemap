@@ -12,7 +12,7 @@ const GRID_TARGET_LINES_ON_SCREEN = 5;
 const GRID_LINE_LOOP_COUNT = 25;
 const POINT_RADIUS = 5; // Radius for plotted points
 const LAST_POINT_PULSE_MAX_RADIUS = 30; // Max radius of the pulsating wave
-const LAST_POINT_PULSE_SPEED = 0.03; // Speed of pulse expansion (pixels per frame)
+const LAST_POINT_PULSE_SPEED = 0.06; // Speed of pulse expansion (pixels per frame)
 
 // Helper functions
 const superFloor = (mult: number, val: number): number => {
@@ -58,8 +58,8 @@ const ImageOverlayCanvas: React.FC<ImageOverlayCanvasProps> = ({
     errors: [],
   });
 
-  const [zoom, setZoom] = useState(0);
-  const [screenTarget, setScreenTarget] = useState<[number, number]>([0, 0]);
+  const [zoom, setZoom] = useState(-6);
+  const [screenTarget, setScreenTarget] = useState<[number, number]>([60, 0]);
   const [isDragging, setIsDragging] = useState(false);
 
   const mouseStartRef = useRef<[number, number]>([0, 0]);
@@ -314,7 +314,7 @@ const ImageOverlayCanvas: React.FC<ImageOverlayCanvasProps> = ({
           ctx.textAlign = "center";
         }
       }
-      ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+      ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
       if (
         worldOriginScreen[0] >= 0 &&
         worldOriginScreen[0] <= currentCanvasSize.width
@@ -338,7 +338,7 @@ const ImageOverlayCanvas: React.FC<ImageOverlayCanvasProps> = ({
         );
       }
       ctx.lineWidth = 0.2;
-      ctx.strokeStyle = "rgba(0,0,0,0.1)";
+      ctx.strokeStyle = "rgba(0,0,0,0.4)";
       const minorXStep = xScale / 5;
       if (minorXStep > 0 && minorXStep > Number.EPSILON * 100) {
         for (
@@ -465,7 +465,7 @@ const ImageOverlayCanvas: React.FC<ImageOverlayCanvasProps> = ({
         const imgWorldR = imageWorldWidth / 2;
         const imgWorldT = -actualImageWorldHeight / 2;
         const imgWorldB = actualImageWorldHeight / 2;
-        const [sL, sT] = toScreenspace(imgWorldL, imgWorldT);
+        const [sL, sT] = toScreenspace(imgWorldL+113.5, imgWorldT-2);
         const [sR, sB] = toScreenspace(imgWorldR, imgWorldB);
         const sW = sR - sL;
         const sH = sB - sT;
