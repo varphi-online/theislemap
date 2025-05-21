@@ -4,11 +4,14 @@ import { defineConfig } from "vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import path from "path";
 
-export default defineConfig({
+const repositoryName = 'theislemap';
+
+export default defineConfig(({command})=>{return {
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
   resolve: {
       alias: {
         "~": path.resolve(__dirname, "app"),
       },
     },
-});
+  base: command === 'build' ? `/${repositoryName}/` : '/',
+}});
