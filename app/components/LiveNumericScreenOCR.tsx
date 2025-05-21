@@ -689,7 +689,7 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
 
   return (
     <div style={styles.body}>
-      <h1 className="flex"><FlaskConical/>Cordex</h1>
+      <p className="flex"><FlaskConical/>Cordex</p>
 
       <div style={styles.controlsAndResults}>
         <div className="flex">
