@@ -58,8 +58,8 @@ export default function MapComponent({
     {}
   );
 
-  const [zoom, setZoom] = useState(-6);
-  const [screenTarget, setScreenTarget] = useState<[number, number]>([60, 0]);
+  const [zoom, setZoom] = useState(-6.7);
+  const [screenTarget, setScreenTarget] = useState<[number, number]>([130, 0]);
   const [isDragging, setIsDragging] = useState(false);
 
   const mouseStartRef = useRef<[number, number]>([0, 0]);

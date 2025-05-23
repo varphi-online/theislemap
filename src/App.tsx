@@ -1,9 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import {
   ArrowRightIcon,
+  Bubbles,
+  Building2,
   FlaskConicalIcon,
+  Grid,
+  MapPin,
+  PawPrint,
+  Settings,
   SidebarIcon,
+  Tent,
   Trash2Icon,
   X,
 } from "lucide-react";
@@ -20,14 +27,20 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import type { Location } from "./components/map/types";
-import { RadioGroup, RadioGroupItem } from "@radix-ui/react-radio-group"; // Assuming this is the correct import
+import { RadioGroup, RadioGroupItem } from "./components/ui/radio-group"; // Assuming this is the correct import
 import { Label } from "@radix-ui/react-label"; // Assuming this is the correct import
 import {
-  AccordionContent,
+  AccordionContent as AccordionContentForce,
+  Accordion as AccordionForce,
+  AccordionItem as AccordionItemForce,
+  AccordionTrigger as AccordionTriggerForce,
+} from "./components/ui/accordionForce";
+import {
   Accordion,
+  AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "./components/ui/accordion";
+} from "@/components/ui/accordion";
 
 function parseLocationToTuple(inputStr: string): Location | null {
   if (typeof inputStr !== "string" || !(inputStr = inputStr.trim())) {
@@ -78,14 +91,19 @@ function Toggle({
   name,
   checked,
   setChecked,
+  children,
 }: {
   name: string;
   checked: boolean;
   setChecked: (checked: boolean) => void;
+  children: React.ReactNode;
 }) {
   return (
     <div className="flex justify-between items-center">
-      <p>{name}</p>
+      <div className=" flex items-center gap-2">
+        {children}
+        <p>{name}</p>
+      </div>
       <Switch checked={checked} onCheckedChange={setChecked} />
     </div>
   );
@@ -95,23 +113,24 @@ function App() {
   const [UPoints, setUPoints] = useState<Location[]>([]);
   const [CPoints, setCPoints] = useState<Location[]>([]);
   const [inp, setInp] = useState("");
+  const mapContainerRef = useRef<HTMLDivElement>(null)
+  const [mapDisplayWidth, setMapDisplayWidth] = useState(1000);
 
   /** PREFERENCES */
-  const [preferences, setPreferences] = useState(JSON.parse(localStorage.getItem("preferences")||"null")||{
-    mapStyle: "iml",
-    gridlines: false,
-    locationLabels: true,
-    mudOverlay: false,
-    sanctuaryOverlay: false,
-    structureOverlay: false,
-    migrationOverlay: false,
-  });
-
-  const canvasContainerRef = useRef<HTMLDivElement>(null);
-  useEffect(()=>{
-    localStorage.setItem("preferences",JSON.stringify(preferences))
-  },[preferences])
-  
+  const [preferences, setPreferences] = useState(
+    JSON.parse(localStorage.getItem("preferences") || "null") || {
+      mapStyle: "iml",
+      gridlines: false,
+      locationLabels: true,
+      mudOverlay: false,
+      sanctuaryOverlay: false,
+      structureOverlay: false,
+      migrationOverlay: false,
+    }
+  );
+  useEffect(() => {
+    localStorage.setItem("preferences", JSON.stringify(preferences));
+  }, [preferences]);
 
   // Helper function to handle preference changes
   const handlePreferenceChange =
@@ -130,21 +149,54 @@ function App() {
     }
   };
 
+    useEffect(() => {
+    localStorage.setItem("preferences", JSON.stringify(preferences));
+  }, [preferences]);
+
+  useEffect(() => {
+    const containerElement = mapContainerRef.current;
+    if (!containerElement) return;
+
+    const observer = new ResizeObserver((entries) => {
+      if (entries[0]) {
+        const newWidth = entries[0].contentRect.width; // Use contentRect for width without padding/border
+        setMapDisplayWidth(newWidth);
+        // Optional: if height also needs to be dynamic
+        // const newHeight = entries[0].contentRect.height;
+        // setMapDisplayHeight(newHeight);
+      }
+    });
+
+    observer.observe(containerElement);
+    // Set initial size
+    setMapDisplayWidth(containerElement.clientWidth); // clientWidth is content + padding
+    // Optional: if height also needs to be dynamic
+    // setMapDisplayHeight(containerElement.clientHeight);
+
+    return () => {
+      if (containerElement) {
+        observer.unobserve(containerElement);
+      }
+      observer.disconnect();
+    };
+  }, []);
+
   // Base properties for map images
   const baseImageDimensions = { width: 1234, height: 1234 };
   const defaultMapLayerProps = { ...baseImageDimensions, lat: 0, long: 57 };
 
   return (
-    <SidebarProvider className="flex">
-      <Sidebar>
+    <SidebarProvider className="flex relative">
+      <Sidebar className="border-r-[#303849]">
         <SidebarHeader>Cordex</SidebarHeader>
-        <SidebarContent>
+        <SidebarContent className="gap-0">
           <SidebarGroup>
             <div className="flex flex-col items-center text-white bg-[#303849] p-3 rounded-xl gap-3 w-full">
               <div className="flex gap-2 items-center w-full">
                 <Trash2Icon
-                  className="w-8 h-8 cursor-pointer border-transparent hover:border-gray-500 rounded-lg border-2 p-1"
+                  className="cursor-pointer border-transparent hover:border-gray-500 rounded-lg border-2 p-0"
                   onClick={() => setUPoints([])}
+                  size={32}
                 />
                 <input
                   value={inp}
@@ -159,7 +211,7 @@ function App() {
                   }}
                 />
                 <ArrowRightIcon
-                  className="w-8 h-8 cursor-pointer border-transparent hover:border-gray-500 rounded-lg border-2 p-1"
+                  className="w-8 h-8 cursor-pointer border-transparent hover:border-gray-500 rounded-lg border-2 px-0"
                   onClick={handleAddUPoint}
                 />
               </div>
@@ -187,15 +239,96 @@ function App() {
             <Accordion
               type="single"
               collapsible
-              className="w-ful bg-[#303849] rounded-xl"
+              className="w-full bg-[#303849] rounded-xl px-3"
             >
-              <AccordionItem value="cor">
-                <AccordionTrigger className="bg-[#303849] px-3 rounded-xl hover:cursor-pointer">
-                  <div className="flex items-center gap-2">
-                    Cordex <FlaskConicalIcon size={20} />
-                  </div>
+              <AccordionItem value="prefs" className="border-b-0">
+                <AccordionTrigger className="hover:cursor-pointer">
+                  <h1 className="flex items-center text-md font-bold gap-2">
+                    <Settings /> Preferences
+                  </h1>
                 </AccordionTrigger>
-                <AccordionContent className="pb-1">
+                <AccordionContent className="flex flex-col gap-1">
+                  <div className="mb-2">
+                    <h1 className="mb-1">Map Style</h1>
+                    <RadioGroup
+                      value={preferences.mapStyle}
+                      className="gap-0 pl-2"
+                      onValueChange={(value) =>
+                        setPreferences((prev: any) => ({
+                          ...prev,
+                          mapStyle: value,
+                        }))
+                      }
+                    >
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="vuln" id="option-one" />
+                        <Label htmlFor="option-one">Vulnona</Label>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="iml" id="option-two" />
+                        <Label htmlFor="option-two">IsleMaps (Light)</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
+                  <Toggle
+                    name="Gridlines"
+                    checked={preferences.gridlines}
+                    setChecked={handlePreferenceChange("gridlines")}
+                  >
+                    <Grid />
+                  </Toggle>
+                  <Toggle
+                    name="Location Labels"
+                    checked={preferences.locationLabels}
+                    setChecked={handlePreferenceChange("locationLabels")}
+                  >
+                    <MapPin />
+                  </Toggle>
+                  <Toggle
+                    name="Mud"
+                    checked={preferences.mudOverlay}
+                    setChecked={handlePreferenceChange("mudOverlay")}
+                  >
+                    <Bubbles />
+                  </Toggle>
+                  <Toggle
+                    name="Sanctuaries"
+                    checked={preferences.sanctuaryOverlay}
+                    setChecked={handlePreferenceChange("sanctuaryOverlay")}
+                  >
+                    <Tent />
+                  </Toggle>
+                  <Toggle
+                    name="Migration Zones"
+                    checked={preferences.migrationOverlay}
+                    setChecked={handlePreferenceChange("migrationOverlay")}
+                  >
+                    <PawPrint />
+                  </Toggle>
+                  <Toggle
+                    name="Structures"
+                    checked={preferences.structureOverlay}
+                    setChecked={handlePreferenceChange("structureOverlay")}
+                  >
+                    <Building2 />
+                  </Toggle>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </SidebarGroup>
+          <SidebarGroup>
+            <AccordionForce
+              type="single"
+              collapsible
+              className="w-full bg-[#303849] rounded-xl"
+            >
+              <AccordionItemForce value="cor">
+                <AccordionTriggerForce className="bg-[#303849] px-3 rounded-xl hover:cursor-pointer">
+                  <div className="flex items-center text-md font-bold gap-2">
+                    <FlaskConicalIcon /> Cordex
+                  </div>
+                </AccordionTriggerForce>
+                <AccordionContentForce className="pb-1">
                   <LiveNumericScreenOCR
                     numberTuples={CPoints}
                     setNumberTuples={setCPoints}
@@ -207,75 +340,26 @@ function App() {
                         )}, ${CPoints[0].long.toFixed(2)}`
                       : ""}
                   </p>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          </SidebarGroup>
-          <SidebarGroup>
-            <h1>Map Style</h1>
-            <RadioGroup
-              value={preferences.mapStyle}
-              onValueChange={(value) =>
-                setPreferences((prev: any) => ({ ...prev, mapStyle: value }))
-              }
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="vuln" id="option-one" />
-                <Label htmlFor="option-one">Vulnona</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="iml" id="option-two" />
-                <Label htmlFor="option-two">IsleMaps (Light)</Label>
-              </div>
-            </RadioGroup>
-          </SidebarGroup>
-          <SidebarGroup>
-            <Toggle
-              name="Gridlines"
-              checked={preferences.gridlines}
-              setChecked={handlePreferenceChange("gridlines")}
-            />
-            <Toggle
-              name="Location Labels"
-              checked={preferences.locationLabels}
-              setChecked={handlePreferenceChange("locationLabels")}
-            />
-            <Toggle
-              name="Show Mud"
-              checked={preferences.mudOverlay}
-              setChecked={handlePreferenceChange("mudOverlay")}
-            />
-            <Toggle
-              name="Show Sanctuaries"
-              checked={preferences.sanctuaryOverlay}
-              setChecked={handlePreferenceChange("sanctuaryOverlay")}
-            />
-            <Toggle
-              name="Show Migration Zones"
-              checked={preferences.migrationOverlay}
-              setChecked={handlePreferenceChange("migrationOverlay")}
-            />
-            <Toggle
-              name="Show Structures"
-              checked={preferences.structureOverlay}
-              setChecked={handlePreferenceChange("structureOverlay")}
-            />
+                </AccordionContentForce>
+              </AccordionItemForce>
+            </AccordionForce>
           </SidebarGroup>
         </SidebarContent>
+        <SidebarTrigger className="border-[#303849] text-white bg-[#202632] border-1 ml-2 mt-2 absolute -right-9">
+          <SidebarIcon />
+        </SidebarTrigger>
       </Sidebar>
-      <SidebarTrigger>
-        <SidebarIcon />
-      </SidebarTrigger>
+
       <div
-        className="flex justify-center w-full items-center flex-col"
-        ref={canvasContainerRef}
+        className="flex-1 grow"
+        ref={mapContainerRef}
       >
         <MapComponent
           images={[
             preferences.mapStyle === "iml"
               ? { url: "map-light.png", ...defaultMapLayerProps }
               : { url: "realmap.png", ...baseImageDimensions, lat: 2, long: 2 },
-              { url: "water.png", ...defaultMapLayerProps },
+            { url: "water.png", ...defaultMapLayerProps },
             ...(preferences.mudOverlay
               ? [{ url: "mudOverlay.png", ...defaultMapLayerProps }]
               : []),
@@ -288,13 +372,11 @@ function App() {
             ...(preferences.migrationOverlay
               ? [{ url: "migration.png", ...defaultMapLayerProps }]
               : []),
-            
           ]}
           doDrawGrid={preferences.gridlines}
           initialHeight={window.innerHeight}
           initialWidth={
-            window.innerWidth -
-            (window.innerHeight <= window.innerWidth ? 320 : 0)
+            mapDisplayWidth
           }
           paths={[
             { path: CPoints, enabled: true, color: "black" },
