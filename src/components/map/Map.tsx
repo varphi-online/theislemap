@@ -529,14 +529,14 @@ export default function Map({
 
   const drawText = (ctx: CanvasRenderingContext2D, text: MapText) => {
     ctx.save();
-    ctx.font = `${text.size}px ${FONT}`;
+    ctx.font = `${text.size}px ${FONT} bold`;
     ctx.textAlign = "center"; // Added for consistency, adjust if needed
     ctx.textBaseline = "middle"; // Added for consistency, adjust if needed
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-    ctx.lineWidth = 2.5;
+    ctx.strokeStyle = "#000000";
+    ctx.lineWidth = 3;
     const [screenX, screenY] = toScreenspace(text.long, text.lat);
     ctx.strokeText(text.text, screenX, screenY);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.95)";
+    ctx.fillStyle = "#FFFFFF";
     ctx.fillText(text.text, screenX, screenY);
     ctx.restore();
   };
