@@ -5,7 +5,6 @@ import {
   Bubbles,
   Building2,
   FlaskConicalIcon,
-  Github,
   Grid,
   MapPin,
   PawPrint,
