@@ -32,31 +32,31 @@ const precision = (a: number): number => {
   return p;
 };
 
-interface ImageLoadState {
-  elements: HTMLImageElement[];
-  allAttempted: boolean;
-  errors: string[];
+interface ImageEntry {
+  element?: HTMLImageElement;
+  status: "pending" | "loading" | "loaded" | "error";
+  error?: string;
 }
 
-export default function Map({
-  images, // Removed 'images:' alias
+export default function MapComponent({
+  images,
   initialWidth = 800,
   initialHeight = 600,
   paths = [],
   texts = [],
+  doDrawGrid,
 }: {
   images: MapImage[];
   initialWidth?: number;
   initialHeight?: number;
   paths?: Path[];
   texts?: MapText[];
+  doDrawGrid: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [imageLoadData, setImageLoadData] = useState<ImageLoadState>({
-    elements: [],
-    allAttempted: false,
-    errors: [],
-  });
+  const [imageEntries, setImageEntries] = useState<Record<string, ImageEntry>>(
+    {}
+  );
 
   const [zoom, setZoom] = useState(-6);
   const [screenTarget, setScreenTarget] = useState<[number, number]>([60, 0]);
@@ -107,52 +107,101 @@ export default function Map({
       const currentWorldHeight = worldBounds[3] - worldBounds[2];
       if (currentWorldWidth === 0 || currentWorldHeight === 0) return [0, 0];
       const normX = (worldX - worldBounds[0]) / currentWorldWidth;
-      const normY = (worldY - worldBounds[2]) / currentWorldHeight; // worldBounds[2] is bottom, worldBounds[3] is top
+      const normY = (worldY - worldBounds[2]) / currentWorldHeight;
       return [
         normX * currentCanvasSize.width,
-        normY * currentCanvasSize.height, // This maps world bottom to canvas top (0), world top to canvas bottom (height)
+        normY * currentCanvasSize.height,
       ];
     },
     [worldBounds, currentCanvasSize]
   );
 
-  const imageDeps = JSON.stringify(images);
   useEffect(() => {
-    if (!images || images.length === 0) {
-      setImageLoadData({ elements: [], allAttempted: true, errors: [] });
-      return;
-    }
-    setImageLoadData({ elements: [], allAttempted: false, errors: [] });
-    const loadPromises = images.map((imageInfo) => {
-      return new Promise<HTMLImageElement>((resolve, reject) => {
-        const img = new Image();
-        img.src = imageInfo.url;
-        img.onload = () => resolve(img);
-        img.onerror = () =>
-          reject({
-            url: imageInfo.url,
-            error: `Failed to load ${imageInfo.url}`,
-          });
-      });
-    });
-    Promise.allSettled(loadPromises).then((results) => {
-      const successfullyLoadedElements: HTMLImageElement[] = [];
-      const loadingErrors: string[] = [];
-      results.forEach((result) => {
-        if (result.status === "fulfilled") {
-          successfullyLoadedElements.push(result.value);
-        } else {
-          console.error(result.reason.error);
-          loadingErrors.push(result.reason.url);
+    // This effect manages loading images based on the `images` prop.
+    // It tries to reuse existing HTMLImageElement objects and avoid re-fetching.
+    const newEntriesToUpdate: Record<string, Partial<ImageEntry>> = {};
+    let needsStateUpdate = false;
+
+    images.forEach((imageInfo) => {
+      const url = imageInfo.url;
+      const currentEntry = imageEntries[url];
+
+      if (
+        !currentEntry ||
+        currentEntry.status === "pending" ||
+        currentEntry.status === "error" // Simple retry on error strategy
+      ) {
+        needsStateUpdate = true;
+        const img = currentEntry?.element || new Image(); // Reuse element if it exists
+
+        // Update entry to loading status
+        newEntriesToUpdate[url] = {
+          element: img,
+          status: "loading",
+          error: undefined,
+        };
+
+        // Attach handlers and set src only if necessary
+        if (img.src !== url || currentEntry?.status === "error" || !img.src) {
+          img.onload = () => {
+            setImageEntries((prev) => ({
+              ...prev,
+              [url]: { ...prev[url], element: img, status: "loaded" },
+            }));
+          };
+          img.onerror = () => {
+            const errorMsg = `Failed to load ${url}`;
+            console.error(errorMsg);
+            setImageEntries((prev) => ({
+              ...prev,
+              [url]: {
+                ...prev[url],
+                element: img,
+                status: "error",
+                error: errorMsg,
+              },
+            }));
+          };
+          img.src = url;
+        } else if (img.complete && img.naturalWidth > 0) {
+          // Image was already loaded (e.g. from browser cache, or src was set and completed quickly)
+           newEntriesToUpdate[url] = { element: img, status: "loaded" };
         }
-      });
-      setImageLoadData({
-        elements: successfullyLoadedElements,
-        allAttempted: true,
-        errors: loadingErrors,
-      });
+      }
     });
-  }, [imageDeps]); // imageDeps ensures this runs if the images prop content changes
+
+    // Optional: Cleanup entries for URLs no longer in the `images` prop
+    const currentUrls = new Set(images.map((img) => img.url));
+    Object.keys(imageEntries).forEach((url) => {
+      if (!currentUrls.has(url)) {
+        // If an image is removed from the prop, we might want to remove its entry
+        // For now, we'll let them persist in imageEntries to act as a cache
+        // If active cleanup is needed:
+        // needsStateUpdate = true;
+        // delete newEntriesToUpdate[url]; // This is not right, needs to be handled in setImageEntries
+      }
+    });
+
+    if (needsStateUpdate) {
+      setImageEntries((prev) => {
+        const updatedEntries = { ...prev };
+        for (const url in newEntriesToUpdate) {
+          updatedEntries[url] = {
+            ...(prev[url] || {}), // Keep existing data like element if not overwritten
+            ...newEntriesToUpdate[url],
+          } as ImageEntry;
+        }
+
+        // Actual cleanup phase if implemented:
+        // Object.keys(updatedEntries).forEach(url => {
+        //   if (!currentUrls.has(url)) {
+        //     delete updatedEntries[url];
+        //   }
+        // });
+        return updatedEntries;
+      });
+    }
+  }, [images]); // Dependency: images prop. Assumes parent memoizes `images` if its reference changes without content change.
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -394,152 +443,163 @@ export default function Map({
     return () => {
       cancelAnimationFrame(animationFrameId);
     };
-  }, [paths]); // Re-run if paths change (e.g., number of points or paths)
+  }, [paths]);
 
-  const drawImages = (ctx: CanvasRenderingContext2D) => {
-    if (!imageLoadData.allAttempted) {
-      ctx.fillStyle = "lightgray";
-      ctx.fillRect(0, 0, currentCanvasSize.width, currentCanvasSize.height);
-      ctx.fillStyle = "black";
-      ctx.textAlign = "center";
-      ctx.fillText(
-        "Loading images...",
-        currentCanvasSize.width / 2,
-        currentCanvasSize.height / 2
-      );
-      return;
-    }
+  const drawImages = useCallback(
+    (ctx: CanvasRenderingContext2D) => {
+      let anyLoading = false;
+      let drawnImageCount = 0;
+      const errorUrls: string[] = [];
 
-    if (imageLoadData.elements.length === 0 && imageLoadData.allAttempted) {
-      ctx.fillStyle = "lightgray";
-      ctx.fillRect(0, 0, currentCanvasSize.width, currentCanvasSize.height);
-      ctx.fillStyle = "black";
-      ctx.textAlign = "center";
-      let message = "No images to display.";
-      if (imageLoadData.errors.length > 0) {
-        message = `Failed to load: ${imageLoadData.errors
-          .slice(0, 3)
-          .join(", ")}${imageLoadData.errors.length > 3 ? "..." : ""}`;
+      if (images.length === 0) {
+        // No images specified, so just return. Grid/paths/texts will draw over default background.
+        return;
       }
-      ctx.fillText(
-        message,
-        currentCanvasSize.width / 2,
-        currentCanvasSize.height / 2
-      );
-      drawGrid(ctx);
-    } else {
-      imageLoadData.elements.forEach((htmlImg, index) => {
-        const mapImage = images[index]; // Get the corresponding MapImage metadata
-        if (!mapImage) {
-          console.warn(
-            `MapImage metadata not found for loaded image at index ${index}`
+
+      images.forEach((mapImage) => {
+        const entry = imageEntries[mapImage.url];
+
+        if (entry && entry.status === "loaded" && entry.element) {
+          const htmlImg = entry.element;
+          const worldImageMinX = mapImage.long - mapImage.width / 2;
+          const worldImageMaxX = mapImage.long + mapImage.width / 2;
+          const worldImageMinY = mapImage.lat - mapImage.height / 2;
+          const worldImageMaxY = mapImage.lat + mapImage.height / 2;
+
+          const [screenLeftX, screenTopY] = toScreenspace(
+            worldImageMinX,
+            worldImageMinY
           );
-          return;
-        }
-
-        // World coordinates of the image, assuming (long, lat) is the center.
-        const worldImageMinX = mapImage.long - mapImage.width / 2;
-        const worldImageMaxX = mapImage.long + mapImage.width / 2;
-        const worldImageMinY = mapImage.lat - mapImage.height / 2; // "Bottom" edge in world
-        const worldImageMaxY = mapImage.lat + mapImage.height / 2; // "Top" edge in world
-
-        // Convert corner points to screen space.
-        // toScreenspace maps world min Y (bottom) to screen min Y (canvas top, Y=0 for full view)
-        // and world max Y (top) to screen max Y (canvas bottom, Y=canvasHeight for full view)
-
-        const [screenLeftX, screenTopY] = toScreenspace(
-          worldImageMinX,
-          worldImageMinY
-        );
-        // screenTopY is the screen Y for the world's "bottom" edge of the image.
-        // This will be the *top-most* Y value on the canvas for the image.
-
-        const [screenRightX, screenBottomY] = toScreenspace(
-          worldImageMaxX,
-          worldImageMaxY
-        );
-        // screenBottomY is the screen Y for the world's "top" edge of the image.
-        // This will be the *bottom-most* Y value on the canvas for the image.
-
-        const drawCanvasX = screenLeftX;
-        const drawCanvasY = screenTopY; // Top-most Y on canvas for drawImage
-
-        const screenPixelWidth = screenRightX - screenLeftX;
-        const screenPixelHeight = screenBottomY - screenTopY; // bottom-most screen Y - top-most screen Y
-
-        if (screenPixelWidth > 0 && screenPixelHeight > 0) {
-          // ctx.save()
-          // ctx.globalAlpha = .3
-          ctx.drawImage(
-            htmlImg,
-            drawCanvasX,
-            drawCanvasY,
-            screenPixelWidth,
-            screenPixelHeight
+          const [screenRightX, screenBottomY] = toScreenspace(
+            worldImageMaxX,
+            worldImageMaxY
           );
-          // ctx.restore()
+
+          const drawCanvasX = screenLeftX;
+          const drawCanvasY = screenTopY;
+          const screenPixelWidth = screenRightX - screenLeftX;
+          const screenPixelHeight = screenBottomY - screenTopY;
+
+          if (screenPixelWidth > 0 && screenPixelHeight > 0) {
+            ctx.drawImage(
+              htmlImg,
+              drawCanvasX,
+              drawCanvasY,
+              screenPixelWidth,
+              screenPixelHeight
+            );
+            drawnImageCount++;
+          }
+        } else if (entry && entry.status === "loading") {
+          anyLoading = true;
+        } else if (entry && entry.status === "error") {
+          if (!errorUrls.includes(mapImage.url)) {
+            errorUrls.push(mapImage.url);
+          }
+        } else if (!entry) {
+          // Entry not yet created, implies it's about to be loaded
+          anyLoading = true;
         }
       });
-      drawGrid(ctx);
-    }
-  };
 
-  const drawPath = (ctx: CanvasRenderingContext2D, path: Path) => {
-    if (path.enabled && path.path.length > 0) {
-      ctx.save();
-
-      if (path.path.length > 1) {
-        ctx.beginPath();
-        ctx.setLineDash([5, 3]);
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
-        ctx.moveTo(...toScreenspace(path.path[0].long, path.path[0].lat));
-        path.path.forEach((point) => {
-          ctx.lineTo(...toScreenspace(point.long, point.lat));
-        });
-        ctx.stroke();
-        ctx.setLineDash([]);
+      if (anyLoading && drawnImageCount === 0 && images.length > 0) {
+        ctx.fillStyle = "lightgray"; // Or your map's background color
+        ctx.fillRect(0, 0, currentCanvasSize.width, currentCanvasSize.height);
+        ctx.fillStyle = "black";
+        ctx.textAlign = "center";
+        ctx.fillText(
+          "Loading images...",
+          currentCanvasSize.width / 2,
+          currentCanvasSize.height / 2
+        );
+      } else if (
+        !anyLoading &&
+        drawnImageCount === 0 &&
+        images.length > 0
+      ) {
+        // All attempts finished (no loading), but nothing drawn
+        ctx.fillStyle = "lightgray";
+        ctx.fillRect(0, 0, currentCanvasSize.width, currentCanvasSize.height);
+        ctx.fillStyle = "black";
+        ctx.textAlign = "center";
+        let message = "No images to display.";
+        if (errorUrls.length > 0) {
+          message = `Failed to load: ${errorUrls
+            .slice(0, 3)
+            .join(", ")}${errorUrls.length > 3 ? "..." : ""}`;
+        }
+        ctx.fillText(
+          message,
+          currentCanvasSize.width / 2,
+          currentCanvasSize.height / 2
+        );
       }
+    },
+    [images, imageEntries, toScreenspace, currentCanvasSize]
+  );
 
-      path.path.forEach((point, index) => {
-        const [screenX, screenY] = toScreenspace(point.long, point.lat);
-        const isLastPoint = index === path.path.length - 1;
+  const drawPath = useCallback(
+    (ctx: CanvasRenderingContext2D, path: Path) => {
+      if (path.enabled && path.path.length > 0) {
+        ctx.save();
 
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, POINT_RADIUS * 1.3, 0, 2 * Math.PI);
-        ctx.fillStyle = "white";
-        ctx.fill();
-
-        ctx.beginPath();
-        ctx.arc(screenX, screenY, POINT_RADIUS, 0, 2 * Math.PI);
-        ctx.fillStyle = isLastPoint ? path.color || "red" : "blue";
-        ctx.fill();
-
-        if (isLastPoint && pulseRadius > 0) {
+        if (path.path.length > 1) {
           ctx.beginPath();
-          ctx.arc(screenX, screenY, pulseRadius, 0, 2 * Math.PI);
-          ctx.strokeStyle = `rgba(255, 255, 255, ${pulseOpacity})`;
+          ctx.setLineDash([5, 3]);
+          ctx.strokeStyle = "white";
           ctx.lineWidth = 2;
+          ctx.moveTo(...toScreenspace(path.path[0].long, path.path[0].lat));
+          path.path.forEach((point) => {
+            ctx.lineTo(...toScreenspace(point.long, point.lat));
+          });
           ctx.stroke();
+          ctx.setLineDash([]);
         }
-      });
-      ctx.restore();
-    }
-  };
 
-  const drawText = (ctx: CanvasRenderingContext2D, text: MapText) => {
-    ctx.save();
-    ctx.font = `${text.size}px ${FONT} bold`;
-    ctx.textAlign = "center"; // Added for consistency, adjust if needed
-    ctx.textBaseline = "middle"; // Added for consistency, adjust if needed
-    ctx.strokeStyle = "#000000";
-    ctx.lineWidth = 3;
-    const [screenX, screenY] = toScreenspace(text.long, text.lat);
-    ctx.strokeText(text.text, screenX, screenY);
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillText(text.text, screenX, screenY);
-    ctx.restore();
-  };
+        path.path.forEach((point, index) => {
+          const [screenX, screenY] = toScreenspace(point.long, point.lat);
+          const isLastPoint = index === path.path.length - 1;
+
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, POINT_RADIUS * 1.3, 0, 2 * Math.PI);
+          ctx.fillStyle = "white";
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(screenX, screenY, POINT_RADIUS, 0, 2 * Math.PI);
+          ctx.fillStyle = isLastPoint ? path.color || "red" : "blue";
+          ctx.fill();
+
+          if (isLastPoint && pulseRadius > 0) {
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, pulseRadius, 0, 2 * Math.PI);
+            ctx.strokeStyle = `rgba(255, 255, 255, ${pulseOpacity})`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+          }
+        });
+        ctx.restore();
+      }
+    },
+    [toScreenspace, pulseRadius, pulseOpacity]
+  );
+
+  const drawText = useCallback(
+    (ctx: CanvasRenderingContext2D, text: MapText) => {
+      ctx.save();
+      ctx.font = `${text.size}px ${FONT} bold`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.strokeStyle = "#000000";
+      ctx.lineWidth = 3;
+      const [screenX, screenY] = toScreenspace(text.long, text.lat);
+      ctx.strokeText(text.text, screenX, screenY);
+      ctx.fillStyle = "#FFFFFF";
+      ctx.fillText(text.text, screenX, screenY);
+      ctx.restore();
+    },
+    [toScreenspace]
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -549,22 +609,24 @@ export default function Map({
 
     ctx.clearRect(0, 0, currentCanvasSize.width, currentCanvasSize.height);
 
-    drawImages(ctx); // drawImages now uses the full MapImage spec
-    paths.forEach((p) => drawPath(ctx, p));
+    drawImages(ctx);
+    if (doDrawGrid) drawGrid(ctx);
     texts.forEach((t) => drawText(ctx, t));
+    paths.forEach((p) => drawPath(ctx, p));
   }, [
-    images, // Added: drawImages uses images prop
-    imageLoadData,
-    screenTarget,
-    zoomLog,
+    images, // For metadata in drawImages
+    imageEntries, // For actual image elements and statuses
     currentCanvasSize,
-    toScreenspace,
+    drawImages,
     drawGrid,
-    worldBounds,
+    drawPath,
+    drawText,
     paths,
-    texts, // Added: texts prop is used for drawing
-    pulseRadius,
-    pulseOpacity,
+    texts,
+    doDrawGrid,
+    // screenTarget, zoomLog, toScreenspace, worldBounds are implicitly handled
+    // by the memoized draw callbacks (drawGrid, drawImages, etc.)
+    // pulseRadius, pulseOpacity are deps for drawPath, which is a dep here.
   ]);
 
   const handleMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -585,7 +647,7 @@ export default function Map({
         initialScreenTargetOnDragRef.current[1] - dy * worldUnitsPerPixel,
       ]);
     },
-    [isDragging, zoomLog, panSpeedFactor, screenTarget] // Added screenTarget to deps of HMM
+    [isDragging, zoomLog, panSpeedFactor] // screenTarget removed as it's an output
   );
 
   const handleMouseUpOrLeave = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -603,7 +665,6 @@ export default function Map({
       const mouseX = event.clientX - canvasRect.left;
       const mouseY = event.clientY - canvasRect.top;
 
-      // Use current worldBounds and canvasSize directly from closure or pass as args if needed
       const currentWorldWidth = worldBounds[1] - worldBounds[0];
       const currentWorldHeight = worldBounds[3] - worldBounds[2];
 
@@ -633,13 +694,7 @@ export default function Map({
       setZoom(newZoom);
       setScreenTarget([newScreenTargetX, newScreenTargetY]);
     },
-    [
-      zoom,
-      worldBounds,
-      currentCanvasSize,
-      currentInitialBounds,
-      // screenTarget is not directly used but set, so it's an output, not input here
-    ]
+    [zoom, worldBounds, currentCanvasSize, currentInitialBounds]
   );
 
   useEffect(() => {
@@ -655,23 +710,7 @@ export default function Map({
     };
   }, [isDragging]);
 
-  useEffect(() => {
-    const canvasElement = canvasRef.current;
-    if (canvasElement) {
-      // The React onWheel prop handles preventDefault internally if needed
-      // and is generally preferred. However, if direct listener is kept:
-      const wheelHandler = (e: WheelEvent) => {
-        // e.preventDefault(); // Already called in the React synthetic event version
-        // Cast to unknown first for type compatibility if using direct DOM event
-        handleWheel(e as unknown as React.WheelEvent<HTMLCanvasElement>);
-      };
-
-      canvasElement.addEventListener("wheel", wheelHandler, { passive: false });
-      return () => {
-        canvasElement.removeEventListener("wheel", wheelHandler);
-      };
-    }
-  }, [handleWheel]); // handleWheel is memoized
+  // Removed the redundant wheel event listener setup, React's onWheel is sufficient.
 
   return (
     <canvas
@@ -680,15 +719,15 @@ export default function Map({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUpOrLeave}
       onMouseLeave={handleMouseUpOrLeave}
-      onWheel={handleWheel} // Using React's onWheel prop
+      onWheel={handleWheel}
       className=""
       style={{
         border: "1px solid black",
         cursor: "grab",
         touchAction: "none",
-        backgroundColor: "#262b37",
-        height: "100vh", // Consider passing these as props or using CSS classes
-        width: "100vh", // for more flexibility than inline styles
+        backgroundColor: "#262b37", // Default background
+        height: "100vh",
+        width: "100vh",
       }}
     />
   );

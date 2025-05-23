@@ -8,7 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { Switch } from "./components/ui/switch";
-import Map from "./components/map/Map";
+import MapComponent from "./components/map/Map";
 import LiveNumericScreenOCR from "./components/LiveNumericScreenOCR";
 
 import {
@@ -99,7 +99,7 @@ function App() {
   /** PREFERENCES */
   const [preferences, setPreferences] = useState(JSON.parse(localStorage.getItem("preferences")||"null")||{
     mapStyle: "iml",
-    gridlines: true,
+    gridlines: false,
     locationLabels: true,
     mudOverlay: false,
     sanctuaryOverlay: false,
@@ -190,7 +190,7 @@ function App() {
               className="w-ful bg-[#303849] rounded-xl"
             >
               <AccordionItem value="cor">
-                <AccordionTrigger className="bg-[#303849] px-2 rounded-xl">
+                <AccordionTrigger className="bg-[#303849] px-3 rounded-xl hover:cursor-pointer">
                   <div className="flex items-center gap-2">
                     Cordex <FlaskConicalIcon size={20} />
                   </div>
@@ -270,7 +270,7 @@ function App() {
         className="flex justify-center w-full items-center flex-col"
         ref={canvasContainerRef}
       >
-        <Map
+        <MapComponent
           images={[
             preferences.mapStyle === "iml"
               ? { url: "map-light.png", ...defaultMapLayerProps }
@@ -290,6 +290,7 @@ function App() {
               : []),
             
           ]}
+          doDrawGrid={preferences.gridlines}
           initialHeight={window.innerHeight}
           initialWidth={
             window.innerWidth -
