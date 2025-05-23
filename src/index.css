@@ -66,8 +66,8 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0.001 106.423);
-  --sidebar-foreground: oklch(0.147 0.004 49.25);
+  --sidebar: #202632;
+  --sidebar-foreground: #ffffff;
   --sidebar-primary: oklch(0.216 0.006 56.043);
   --sidebar-primary-foreground: oklch(0.985 0.001 106.423);
   --sidebar-accent: oklch(0.97 0.001 106.424);
@@ -121,4 +121,27 @@
 
 body {
   background-color: #14171f;
+  overflow: hidden;
 }
+
+/* ===== Scrollbar CSS ===== */
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #303849 #202632;
+  }
+
+  /* Chrome, Edge, and Safari */
+  *::-webkit-scrollbar {
+    width: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: #202632;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: #303849;
+    border-radius: 12px;
+    border: 0px none #202632;
+  }
