@@ -6,6 +6,7 @@ import React, {
   useCallback,
   type CSSProperties,
 } from "react";
+import { createPortal } from "react-dom"; // Import createPortal
 import type { Location } from "./map/types";
 
 // Type declarations for Tesseract.js when using CDN
@@ -89,7 +90,6 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
   });
   const [isLiveOcrActive, setIsLiveOcrActive] = useState(false);
   const [isOcrBusy, setIsOcrBusy] = useState(false);
-  const [_, setStatusText] = useState("Initializing..."); // Status text setter
 
   const [ocrInterval] = useState(500);
   const [allowSelectionDrawing, setAllowSelectionDrawing] = useState(false);
@@ -120,14 +120,6 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = "#e9e9e9";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#555";
-        ctx.textAlign = "center";
-        ctx.font = "16px sans-serif";
-        ctx.fillText(
-          "Start screen capture to begin.",
-          canvas.width / 2,
-          canvas.height / 2,
-        );
       }
     }
   }, []);
@@ -138,7 +130,7 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
       setStream(null);
     }
     setIsLiveOcrActive(false);
-    setIsSelectionModeActive(false); // Reset selection mode
+    setIsSelectionModeActive(false);
 
     if (videoElementRef.current) {
       videoElementRef.current.srcObject = null;
@@ -165,7 +157,6 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
   }, [stream, drawInitialCanvasContent]);
 
   const initializeTesseractWorker = useCallback(async () => {
-    setStatusText("Loading Tesseract.js worker...");
     if (tesseractWorkerRef.current) {
       await tesseractWorkerRef.current.terminate();
       tesseractWorkerRef.current = null;
@@ -174,12 +165,7 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
       const worker = await Tesseract.createWorker("eng", 1, {
         logger: (m: { status: string; progress: number }) => {
           if (m.status === "recognizing text") {
-            const progress = Math.round(m.progress * 100);
-            setStatusText(
-              `Recognizing numeric text... ${progress}% ${
-                isLiveOcrActive ? "(Live OCR Active)" : ""
-              }`,
-            );
+            // const progress = Math.round(m.progress * 100); // progress unused
           }
         },
       });
@@ -187,13 +173,12 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
         tessedit_char_whitelist: "0123456789,.%£-",
       });
       tesseractWorkerRef.current = worker;
-      setStatusText("Tesseract.js worker ready (Numeric Only).");
+      console.log("Tesseract.js worker ready (Numeric Only).");
     } catch (error) {
       console.error("Error initializing Tesseract worker:", error);
-      setStatusText("Error initializing Tesseract. OCR might not work.");
       tesseractWorkerRef.current = null;
     }
-  }, [isLiveOcrActive]);
+  }, []);
 
   useEffect(() => {
     initializeTesseractWorker();
@@ -212,11 +197,11 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
     (
       ctx: CanvasRenderingContext2D,
       currentSelection: Pick<SelectionRect, "x" | "y" | "width" | "height">,
-      isPreview: boolean, // Added parameter
+      isPreview: boolean,
     ) => {
       if (currentSelection.width > 0 && currentSelection.height > 0) {
         ctx.strokeStyle = "red";
-        ctx.lineWidth = isPreview ? 12 : 5; // Adjust line width based on mode
+        ctx.lineWidth = isPreview ? 12 : 5;
         ctx.strokeRect(
           currentSelection.x,
           currentSelection.y,
@@ -241,7 +226,6 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
     const video = videoElementRef.current;
     if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
       setIsOcrBusy(false);
-      if (isLiveOcrActive) setStatusText("Video not ready for OCR. Retrying...");
       return;
     }
     const tempCanvas = document.createElement("canvas");
@@ -295,20 +279,21 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
       }
     } catch (err: any) {
       console.error("OCR Error:", err);
-      if (isLiveOcrActive) setStatusText("OCR failed. Retrying...");
     } finally {
       setIsOcrBusy(false);
-      if (isLiveOcrActive) setStatusText("Live OCR Active.");
     }
-  }, [isOcrBusy, selection, isLiveOcrActive]);
+  }, [isOcrBusy, selection]);
+
+  const stopLiveOcr = useCallback(() => {
+    setIsLiveOcrActive(false);
+  }, []);
 
   const runRenderLoop = useCallback(() => {
     const video = videoElementRef.current;
     const canvas = snapshotCanvasRef.current;
     if (!video || !canvas || !video.srcObject || video.paused || video.ended) {
       if (isLiveOcrActive) {
-        setIsLiveOcrActive(false);
-        setStatusText("Video stream ended. Live OCR stopped.");
+        stopLiveOcr(); // Use the new stopLiveOcr
       }
       if (animationFrameIdRef.current)
         cancelAnimationFrame(animationFrameIdRef.current);
@@ -328,7 +313,6 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
       canvas.height = video.videoHeight;
     }
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    // Pass !isSelectionModeActive to indicate if it's preview mode
     drawSelectionRectOnCanvas(ctx, selection, !isSelectionModeActive);
     if (isLiveOcrActive) {
       const now = Date.now();
@@ -346,7 +330,8 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
     selection,
     performOcrOnSelection,
     drawSelectionRectOnCanvas,
-    isSelectionModeActive, // Added dependency
+    isSelectionModeActive,
+    stopLiveOcr, // Added stopLiveOcr to dependencies
   ]);
 
   useEffect(() => {
@@ -393,33 +378,25 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
     };
   }, [stream, runRenderLoop]);
 
-  const stopLiveOcr = useCallback(() => {
-    setIsLiveOcrActive(false);
-    setStatusText("Live Numeric OCR stopped.");
-  }, []);
-
   useEffect(() => {
     if (isLiveOcrActive) {
-      setAllowSelectionDrawing(false); // No drawing during live OCR
-      setIsSelectionModeActive(false); // Ensure popup is closed if OCR starts
+      setAllowSelectionDrawing(false);
+      setIsSelectionModeActive(false);
       setButtonsDisabled((prev) => ({
         ...prev,
         toggleLiveOcr: false,
       }));
-      setStatusText("Live Numeric OCR started.");
       lastOcrTimeRef.current = Date.now() - (ocrInterval + 1);
     } else {
-      // OCR is not active
       const canDraw = !!(stream && stream.active);
-      setAllowSelectionDrawing(
-        canDraw && !isSelectionModeActive ? false : canDraw,
-      );
+      setAllowSelectionDrawing(canDraw && isSelectionModeActive);
       setButtonsDisabled((prev) => ({
         ...prev,
         toggleLiveOcr: !(
           selection.width > 5 &&
           selection.height > 5 &&
-          canDraw
+          canDraw &&
+          !isSelectionModeActive
         ),
       }));
     }
@@ -434,7 +411,6 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
 
   const handleStartCapture = async () => {
     try {
-      setStatusText("Requesting screen capture permission...");
       const mediaStream = await navigator.mediaDevices.getDisplayMedia({
         video: { cursor: "always" } as MediaTrackConstraints,
         audio: false,
@@ -450,20 +426,15 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
               toggleLiveOcr: true,
             });
             setAllowSelectionDrawing(true);
-            setIsSelectionModeActive(true); // Activate popup selection mode
-            setStatusText(
-              'Screen capture started. Drag on the large video to select a region, then click "Confirm Selection".',
-            );
+            setIsSelectionModeActive(true);
           });
         };
       }
       mediaStream.getVideoTracks()[0].onended = () => {
-        setStatusText("Screen capture ended by user.");
         resetUI();
       };
     } catch (err: any) {
       console.error("Error starting screen capture:", err);
-      setStatusText(`Error: ${err.message}`);
       resetUI();
     }
   };
@@ -523,17 +494,6 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
       return;
     const finalSelection = { ...selection, isDefining: false };
     setSelection(finalSelection);
-    if (finalSelection.width > 5 && finalSelection.height > 5) {
-      setStatusText(
-        'Region selected. Click "Confirm Selection" or adjust.',
-      );
-    } else if (finalSelection.width > 0 || finalSelection.height > 0) {
-      setStatusText(
-        "Selection too small. Please re-select or confirm anyway.",
-      );
-    } else {
-      setStatusText("Drag on video to select a region.");
-    }
   };
 
   const handleToggleLiveOcr = () => {
@@ -541,59 +501,93 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
       stopLiveOcr();
     } else {
       if (selection.width <= 5 || selection.height <= 5) {
-        setStatusText(
-          "No valid region selected. Click small preview to select/adjust region first.",
-        );
         return;
       }
       if (!stream || !videoElementRef.current?.srcObject) {
-        setStatusText(
-          "Screen capture not active. Please start screen capture.",
-        );
         return;
       }
       if (!tesseractWorkerRef.current) {
-        setStatusText(
-          "Tesseract worker not ready. Please wait or refresh.",
-        );
         return;
       }
       setIsLiveOcrActive(true);
     }
   };
 
-  const canvasContainerStyles: CSSProperties = isSelectionModeActive
-    ? {
-        position: "fixed",
-        top: 0,
-        left: 0,
-        width: "100vw",
-        height: "100vh",
-        backgroundColor: "rgba(0, 0, 0, 0.85)",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-        padding: "20px",
-        boxSizing: "border-box",
-      }
-    : {};
+  const canvasContainerStyles: CSSProperties = {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    width: "100vw",
+    height: "100vh",
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+    padding: "20px",
+    boxSizing: "border-box",
+  };
 
   const canvasStyles: CSSProperties = isSelectionModeActive
     ? {
         maxWidth: "100%",
-        maxHeight: "calc(100% - 60px)",
+        maxHeight: "calc(100% - 70px)",
         border: "2px solid #fff",
         objectFit: "contain",
+        backgroundColor: "transparent",
       }
     : {
         border: "",
         maxWidth: "95%",
         height: "auto",
         display: "block",
-        borderRadius: "0.4rem"
+        borderRadius: "0.4rem",
+        objectFit: "contain",
       };
+
+  const canvasElement = (
+    <canvas
+      ref={snapshotCanvasRef}
+      style={canvasStyles}
+      className={`
+        ${
+          isSelectionModeActive
+            ? allowSelectionDrawing // In selection mode, if drawing is allowed, use crosshair
+              ? "cursor-crosshair"
+              : "cursor-default"
+            : stream && stream.active // In preview mode, if stream is active, it's clickable
+              ? "cursor-pointer hover:opacity-90"
+              : "cursor-default"
+        }
+        ${!stream || !stream.active ? "bg-gray-200" : ""}
+        ${
+          isSelectionModeActive && stream && stream.active
+            ? "bg-transparent"
+            : ""
+        }
+      `}
+      onMouseDown={
+        isSelectionModeActive ? handleCanvasMouseDown : undefined
+      }
+      onMouseMove={
+        isSelectionModeActive ? handleCanvasMouseMove : undefined
+      }
+      onMouseUp={isSelectionModeActive ? handleCanvasMouseUp : undefined}
+      onClick={
+        !isSelectionModeActive && stream && stream.active // CHANGED: Allow click if stream active
+          ? (e) => {
+              e.stopPropagation();
+              if (isLiveOcrActive) {
+                stopLiveOcr(); // Stop OCR if it's running
+              }
+              setIsSelectionModeActive(true);
+              setAllowSelectionDrawing(true);
+            }
+          : undefined
+      }
+    />
+  );
 
   return (
     <div className="h-full w-full bg-none">
@@ -601,7 +595,11 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
         <div className="flex-col flex">
           <button
             className={`px-4 py-2.5 mr-2.5 mb-1.5 text-base rounded bg-blue-600 text-white flex justify-between text-left w-full
-              ${buttonsDisabled.startCapture ? "bg-gray-300 cursor-not-allowed" : "hover:bg-blue-700 cursor-pointer"}`}
+              ${
+                buttonsDisabled.startCapture
+                  ? "bg-gray-300 cursor-not-allowed"
+                  : "hover:bg-blue-700 cursor-pointer"
+              }`}
             onClick={handleStartCapture}
             disabled={buttonsDisabled.startCapture}
           >
@@ -610,8 +608,16 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
           </button>
           <button
             className={`px-4 py-2.5 mr-2.5 mb-1.5 text-base rounded text-left w-full
-              ${isLiveOcrActive ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"} text-white
-              ${buttonsDisabled.toggleLiveOcr || isSelectionModeActive ? "bg-gray-300 cursor-not-allowed" : "cursor-pointer"}`}
+              ${
+                isLiveOcrActive
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-green-600 hover:bg-green-700"
+              } text-white
+              ${
+                buttonsDisabled.toggleLiveOcr || isSelectionModeActive
+                  ? "bg-gray-300 cursor-not-allowed"
+                  : "cursor-pointer"
+              }`}
             onClick={handleToggleLiveOcr}
             disabled={buttonsDisabled.toggleLiveOcr || isSelectionModeActive}
           >
@@ -620,14 +626,11 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
           <ol className="list-decimal list-inside mt-2 text-sm text-gray-200">
             <li>Start screen capture of "TheIsle" window.</li>
             <li>
-              Click and drag to select lat. &
-              long. numbers (like the example image).
+              Click and drag to select lat. & long. numbers (like the example
+              image).
             </li>
             <li>Click "Confirm Selection".</li>
-            <li>
-              To edit selection, click the small video
-              preview.
-            </li>
+            <li>To edit selection, click the small video preview.</li>
           </ol>
           <img
             src="example.png"
@@ -637,77 +640,53 @@ const LiveNumericScreenOCR: React.FC<LiveNumericScreenOCRProps> = ({
         </div>
       </div>
 
-      <video ref={videoElementRef} className="hidden" autoPlay playsInline muted />
+      <video
+        ref={videoElementRef}
+        className="hidden"
+        autoPlay
+        playsInline
+        muted
+      />
 
-      <div className="canvas-wrapper flex justify-center w-full" style={canvasContainerStyles}>
-        <canvas
-          ref={snapshotCanvasRef}
-          style={canvasStyles}
-          className={`
-            ${isSelectionModeActive
-              ? allowSelectionDrawing && !isLiveOcrActive
-                ? "cursor-crosshair"
-                : "cursor-default"
-              : stream && stream.active
-                ? "cursor-pointer hover:opacity-90"
-                : "cursor-default"}
-            ${!stream || !stream.active ? "bg-gray-200" : "bg-transparent"}
-          `}
-          onMouseDown={
-            isSelectionModeActive ? handleCanvasMouseDown : undefined
-          }
-          onMouseMove={
-            isSelectionModeActive ? handleCanvasMouseMove : undefined
-          }
-          onMouseUp={isSelectionModeActive ? handleCanvasMouseUp : undefined}
-          onClick={
-            !isSelectionModeActive && stream && stream.active
-              ? (e) => {
+      {isSelectionModeActive
+        ? createPortal(
+            <div
+              className="portal-selection-overlay"
+              style={canvasContainerStyles}
+            >
+              {canvasElement}
+              <button
+                onClick={(e) => {
                   e.stopPropagation();
-                  if (isLiveOcrActive) {
-                    stopLiveOcr(); // Stop OCR if active
+                  if (selection.isDefining) {
+                    setSelection((prev) => ({ ...prev, isDefining: false }));
                   }
-                  setIsSelectionModeActive(true);
-                  setAllowSelectionDrawing(true);
-                  setStatusText(
-                    "Adjust selection or click Confirm Selection.",
-                  );
-                }
-              : undefined
-          }
-        />
-        {isSelectionModeActive && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              if (selection.isDefining) {
-                setSelection((prev) => ({ ...prev, isDefining: false }));
-              }
-              setIsSelectionModeActive(false);
-              const isValidSelection =
-                selection.width > 5 && selection.height > 5;
-              setButtonsDisabled((prev) => ({
-                ...prev,
-                startCapture: true,
-                toggleLiveOcr: !isValidSelection,
-              }));
-              if (isValidSelection) {
-                handleToggleLiveOcr(); // Automatically start OCR if selection is valid
-                setStatusText(
-                  "Selection confirmed. Cordex started. Click small preview to re-select.",
-                );
-              } else {
-                setStatusText(
-                  "No valid selection. Click small preview to select.",
-                );
-              }
-            }}
-            className="mt-4 px-6 py-2.5 text-base bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer"
-          >
-            Confirm Selection & Start Cordex
-          </button>
-        )}
-      </div>
+                  setIsSelectionModeActive(false);
+                  const isValidSelection =
+                    selection.width > 5 && selection.height > 5;
+
+                  if (isValidSelection && stream && stream.active) {
+                    handleToggleLiveOcr(); // This will start OCR if it was stopped
+                  }
+                }}
+                className="mt-4 px-6 py-2.5 text-base bg-blue-600 text-white rounded hover:bg-blue-700 cursor-pointer"
+              >
+                Confirm Selection & Start Cordex
+              </button>
+            </div>,
+            document.body,
+          )
+        : stream && stream.active ? (
+            <div className="canvas-preview-wrapper flex justify-center w-full p-1">
+              {canvasElement}
+            </div>
+          ) : !stream &&
+            snapshotCanvasRef.current &&
+            snapshotCanvasRef.current.width === 640 ? (
+            <div className="canvas-preview-wrapper flex justify-center w-full p-1">
+              {canvasElement}
+            </div>
+          ) : null}
     </div>
   );
 };

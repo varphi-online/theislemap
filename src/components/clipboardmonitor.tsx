@@ -1,8 +1,20 @@
-import { parseLocationToTuple } from "@/App";
+import { parseLocationToTuple } from "@/App"; // Ensure this path is correct
 import React, { useEffect, useRef, useCallback } from "react";
-import type { Location } from "./map/types";
+import type { Location } from "./map/types"; // Ensure this path is correct
 
-function ClipboardMonitor({ enabled, setClipboardContents: setCb }: {enabled: boolean, setClipboardContents: React.Dispatch<React.SetStateAction<Location | undefined>>}) {
+interface ClipboardMonitorProps {
+  enabled: boolean;
+  setClipboardContents: React.Dispatch<
+    React.SetStateAction<Location | undefined>
+  >;
+  pollrate?: number; // Optional pollrate in milliseconds
+}
+
+function ClipboardMonitor({
+  enabled,
+  setClipboardContents: setCb,
+  pollrate = 250, // Default to 250ms if not provided
+}: ClipboardMonitorProps) {
   const lstRef = useRef("");
   const intRef = useRef<NodeJS.Timeout | null>(null);
   const mntRef = useRef(true);
@@ -18,52 +30,84 @@ function ClipboardMonitor({ enabled, setClipboardContents: setCb }: {enabled: bo
     mntRef.current = true;
     return () => {
       mntRef.current = false;
-      clrInt();
+      clrInt(); // Ensure interval is cleared on unmount
     };
   }, [clrInt]);
 
   const chkCb = useCallback(async () => {
-    if (!mntRef.current || document.hidden) return;
+    if (!mntRef.current || document.hidden) {
+      return;
+    }
 
     if (!navigator.clipboard?.readText) {
+      console.warn("Clipboard API not available.");
       clrInt();
       return;
     }
+
     try {
-      const p = await navigator.permissions.query({ name: "clipboard-read" as PermissionName });
+      const p = await navigator.permissions.query({
+        name: "clipboard-read" as PermissionName,
+      });
       if (p.state === "denied") {
+        console.warn(
+          "Clipboard read permission denied. Stopping monitor."
+        );
         clrInt();
         return;
       }
+
       const t = await navigator.clipboard.readText();
       if (mntRef.current && t !== lstRef.current) {
         lstRef.current = t;
-        const n = parseLocationToTuple(t)
-        if (n) setCb(n);
+        const n = parseLocationToTuple(t);
+        if (n) {
+          setCb(n);
+        }
       }
     } catch (er: any) {
-      if (er.name === "NotAllowedError") {
-        clrInt();
-      }
-      // Other errors are ignored to minimize size and prevent stopping
-      // for transient issues like document not being focused in some browsers.
+      console.error(
+        "Error reading clipboard (will retry):",
+        er.name,
+        er.message
+      );
     }
-  }, [setCb, clrInt]);
+  }, [setCb, clrInt]); // parseLocationToTuple is stable
 
   useEffect(() => {
-    if (enabled) {
-      const setup = async () => {
+    // Always clear the previous interval when enabled status or pollrate changes.
+    clrInt();
+
+    if (enabled && pollrate > 0) {
+      const setupPolling = async () => {
+        if (!mntRef.current) return; // Guard if unmounted during async setup
+
+        // Perform an initial check immediately.
         await chkCb();
-        if (mntRef.current && enabled && !intRef.current) {
-          intRef.current = setInterval(chkCb, 1500);
+
+        // If still mounted, enabled, and chkCb didn't cause a stop (e.g. permissions denied),
+        // set the new interval.
+        if (mntRef.current && enabled) {
+          // Note: if chkCb called clrInt due to a persistent issue,
+          // the interval will still be set here, but subsequent chkCb calls
+          // will likely hit the same issue and do nothing or log again.
+          // This is generally fine as it respects the enabled state.
+          intRef.current = setInterval(chkCb, pollrate);
         }
       };
-      setup();
-    } else {
-      clrInt();
+      setupPolling();
+    } else if (enabled && pollrate <= 0) {
+      console.warn(
+        "ClipboardMonitor: pollrate must be a positive number. Polling will not start."
+      );
+      // Interval is already cleared by clrInt() at the top of this effect.
     }
+    // If !enabled, interval is also cleared by clrInt() at the top.
+
+    // Cleanup function: will be called on unmount or before the effect re-runs
+    // due to changes in dependencies.
     return clrInt;
-  }, [enabled, chkCb, clrInt]);
+  }, [enabled, pollrate, chkCb, clrInt]);
 
   return null;
 }
