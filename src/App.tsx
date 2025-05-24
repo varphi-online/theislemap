@@ -234,6 +234,10 @@ function App() {
 
   return (
     <SidebarProvider className="flex relative">
+      <ClipboardMonitor
+        enabled={monitorClip}
+        setClipboardContents={setCbLock}
+      />
       <Sidebar className="border-r-[#303849]">
         <SidebarHeader className="w-full text-center font-medium text-xl">
           Cordex
@@ -388,11 +392,6 @@ function App() {
                   >
                     <EarthLock />
                   </Toggle>
-                  
-                  <ClipboardMonitor
-                    enabled={monitorClip}
-                    setClipboardContents={setCbLock}
-                  />
                   <Toggle
                     name="Monitor Cliboard"
                     checked={monitorClip}
@@ -401,10 +400,22 @@ function App() {
                       "When window is focused, if the contents of the system clipboard are valid coordinates, will add to the most recent path used."
                     }
                   >
-                    
                     <ClipboardCopy />
                   </Toggle>
-                  {monitorClip && <div className="flex ml-2 gap-2 text-xs items-center text-nowrap">PollRate (ms)<Slider defaultValue={[250]} max={1000} min={10} step={20} value={[clipPollSpeed]} onValueChange={v=>setClipPollSpeed(v[0])}/>{clipPollSpeed}</div>}
+                  {monitorClip && (
+                    <div className="flex ml-2 gap-2 text-xs items-center text-nowrap">
+                      PollRate (ms)
+                      <Slider
+                        defaultValue={[250]}
+                        max={1000}
+                        min={10}
+                        step={20}
+                        value={[clipPollSpeed]}
+                        onValueChange={(v) => setClipPollSpeed(v[0])}
+                      />
+                      {clipPollSpeed}
+                    </div>
+                  )}
                 </AccordionContent>
               </AccordionItem>
             </Accordion>
