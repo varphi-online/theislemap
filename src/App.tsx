@@ -1,3 +1,4 @@
+// App.tsx
 import React, { useEffect, useRef, useState } from "react";
 
 import {
@@ -32,9 +33,9 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import type { Location } from "./components/map/types";
-import { RadioGroup, RadioGroupItem } from "./components/ui/radio-group"; // Assuming this is the correct import
-import { Label } from "@radix-ui/react-label"; // Assuming this is the correct import
+import type { Location, Path } from "./components/map/types";
+import { RadioGroup, RadioGroupItem } from "./components/ui/radio-group";
+import { Label } from "@radix-ui/react-label";
 import {
   AccordionContent as AccordionContentForce,
   Accordion as AccordionForce,
@@ -56,6 +57,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Slider } from "./components/ui/slider";
+import History, {
+  addUpdatePath,
+  destringifyMap, // Import destringifyMap
+} from "./components/history";
 
 export function parseLocationToTuple(inputStr: string): Location | null {
   if (typeof inputStr !== "string" || !(inputStr = inputStr.trim())) {
@@ -67,7 +72,7 @@ export function parseLocationToTuple(inputStr: string): Location | null {
 
   // Format: (Lat: -12,345.67 Long: 98,765.43 Alt: ...)
   match = inputStr.match(
-    /\(Lat:\s*(-?[\d,]+(?:\.\d+)?)\s*Long:\s*(-?[\d,]+(?:\.\d+)?)(?:\s*Alt:.*)?\)/i
+    /\(Lat:\s*(-?[\d,]+(?:\.\d+)?)\s*Long:\s*(-?[\d,]+(?:\.\d+)?)(?:\s*Alt:.*)?\)/i,
   );
   if (
     match &&
@@ -79,7 +84,7 @@ export function parseLocationToTuple(inputStr: string): Location | null {
 
   // Format: -12345, 98765, ... (ignores third number if present)
   match = inputStr.match(
-    /^(-?[\d,]+(?:\.\d+)?)\s*,\s*(-?[\d,]+(?:\.\d+)?)\s*,\s*(-?[\d,]+(?:\.\d+)?)$/
+    /^(-?[\d,]+(?:\.\d+)?)\s*,\s*(-?[\d,]+(?:\.\d+)?)\s*,\s*(-?[\d,]+(?:\.\d+)?)$/,
   );
   if (
     match &&
@@ -94,9 +99,9 @@ export function parseLocationToTuple(inputStr: string): Location | null {
   if (
     match &&
     !isNaN((lat = parseInt(match[1], 10))) &&
-    !isNaN((lon = parseInt(match[2], 10))) // Corrected: was match[3] in condition
+    !isNaN((lon = parseInt(match[2], 10)))
   ) {
-    return { lat: lat, long: lon }; // Use lon assigned in condition
+    return { lat: lat, long: lon };
   }
 
   return null;
@@ -147,8 +152,22 @@ function Toggle({
   );
 }
 
+// Helper to get initial path from localStorage or a default
+const getInitialPathState = (): Path => {
+  const historyMap = destringifyMap(
+    localStorage.getItem("pathHistory") || "[]",
+  );
+  const latestPath = historyMap.get("latest");
+  if (latestPath) {
+    return { ...latestPath, enabled: latestPath.path.length > 0 };
+  }
+  return { path: [], enabled: false, name: undefined, date: undefined };
+};
+
 function App() {
-  const [UPoints, setUPoints] = useState<Location[]>([]);
+  const [UPoints, setUPoints] = useState<Location[]>(
+    () => getInitialPathState().path,
+  );
   const [CPoints, setCPoints] = useState<Location[]>([]);
   const [inp, setInp] = useState("");
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -157,6 +176,7 @@ function App() {
   const [monitorClip, setMonitorClip] = useState(false);
   const [cbLoc, setCbLock] = useState<Location>();
   const [clipPollSpeed, setClipPollSpeed] = useState(250);
+  const [loadedPath, setLoadedPath] = useState<Path>(getInitialPathState);
 
   /** PREFERENCES */
   const [preferences, setPreferences] = useState(
@@ -169,36 +189,75 @@ function App() {
       sanctuaryOverlay: false,
       structureOverlay: false,
       migrationOverlay: false,
-    }
+    },
   );
   useEffect(() => {
     localStorage.setItem("preferences", JSON.stringify(preferences));
   }, [preferences]);
 
-  // Helper function to handle preference changes
   const handlePreferenceChange =
     (key: keyof typeof preferences) => (checked: boolean) => {
       setPreferences((prev: any) => ({ ...prev, [key]: checked }));
     };
 
-  // Helper function to add a user point
   const handleAddUPoint = () => {
     if (inp.trim().length > 0) {
       const tuple = parseLocationToTuple(inp);
       if (tuple) {
-        setUPoints((o) => [...o, tuple]);
+        setUPoints((o) => [...o, tuple]); // This will trigger the useEffect below
         setInp("");
       }
     }
   };
 
   useEffect(() => {
-    localStorage.setItem("preferences", JSON.stringify(preferences));
-  }, [preferences]);
-
-  useEffect(() => {
-    if (cbLoc) setUPoints((o) => [...o, cbLoc]);
+    if (cbLoc) {
+      setUPoints((o) => [...o, cbLoc]); // This will trigger the useEffect below
+      // setCbLock(undefined); // Optional: clear immediately after processing
+    }
   }, [cbLoc]);
+
+  // Effect to synchronize UPoints with loadedPath and localStorage ("latest" path)
+  useEffect(() => {
+    const uPointsStr = JSON.stringify(UPoints);
+    const loadedPathStr = JSON.stringify(loadedPath.path);
+    const uPointsEnabled = UPoints.length > 0;
+
+    if (loadedPath.date) {
+      // A named/dated path is loaded
+      if (uPointsStr !== loadedPathStr) {
+        // User has modified the named path; transition to a new "latest" state
+        const newLatestPath: Path = {
+          path: UPoints,
+          enabled: uPointsEnabled,
+          name: undefined,
+          date: undefined,
+        };
+        setLoadedPath(newLatestPath);
+        addUpdatePath(newLatestPath); // Saves as "latest"
+      }
+      // If UPoints match loadedPath.path, do nothing; the named path is current and unchanged
+    } else {
+      // "latest" path is loaded (or no path/default path)
+      const newLatestState: Path = {
+        ...loadedPath, // Preserve other potential props of "latest" if any (though name/date are undefined)
+        path: UPoints,
+        enabled: uPointsEnabled,
+        name: undefined, // Ensure "latest" path has no name/date
+        date: undefined,
+      };
+      // Update loadedPath state only if necessary to avoid loops
+      if (
+        uPointsStr !== loadedPathStr ||
+        loadedPath.enabled !== uPointsEnabled ||
+        loadedPath.name !== newLatestState.name || // ensure name/date are cleared if they were somehow set
+        loadedPath.date !== newLatestState.date
+      ) {
+        setLoadedPath(newLatestState);
+      }
+      addUpdatePath(newLatestState); // Update "latest" in localStorage
+    }
+  }, [UPoints, loadedPath, setLoadedPath]); // setLoadedPath is stable
 
   useEffect(() => {
     const containerElement = mapContainerRef.current;
@@ -206,19 +265,13 @@ function App() {
 
     const observer = new ResizeObserver((entries) => {
       if (entries[0]) {
-        const newWidth = entries[0].contentRect.width; // Use contentRect for width without padding/border
+        const newWidth = entries[0].contentRect.width;
         setMapDisplayWidth(newWidth);
-        // Optional: if height also needs to be dynamic
-        // const newHeight = entries[0].contentRect.height;
-        // setMapDisplayHeight(newHeight);
       }
     });
 
     observer.observe(containerElement);
-    // Set initial size
-    setMapDisplayWidth(containerElement.clientWidth); // clientWidth is content + padding
-    // Optional: if height also needs to be dynamic
-    // setMapDisplayHeight(containerElement.clientHeight);
+    setMapDisplayWidth(containerElement.clientWidth);
 
     return () => {
       if (containerElement) {
@@ -228,7 +281,6 @@ function App() {
     };
   }, []);
 
-  // Base properties for map images
   const baseImageDimensions = { width: 1234, height: 1234 };
   const defaultMapLayerProps = { ...baseImageDimensions, lat: 0, long: 57 };
 
@@ -237,6 +289,7 @@ function App() {
       <ClipboardMonitor
         enabled={monitorClip}
         setClipboardContents={setCbLock}
+        pollrate={clipPollSpeed}
       />
       <Sidebar className="border-r-[#303849]">
         <SidebarHeader className="w-full text-center font-medium text-xl">
@@ -252,50 +305,107 @@ function App() {
           }}
         >
           <SidebarGroup>
-            <div className="flex flex-col items-center text-white bg-[#303849] p-3 rounded-xl gap-3 w-full">
-              <div className="flex gap-2 items-center w-full">
-                <Trash2Icon
-                  className="cursor-pointer border-transparent hover:border-gray-500 rounded-lg border-2 p-0"
-                  onClick={() => setUPoints([])}
-                  size={32}
-                />
-                <input
-                  value={inp}
-                  className="border-1 text-white p-2 rounded-lg bg-[#262b37] w-full"
-                  placeholder="Lat, Long, Alt"
-                  onChange={(v) => setInp(v.target.value)}
-                  onKeyUp={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      handleAddUPoint();
-                    }
-                  }}
-                />
-                <ArrowRightIcon
-                  className="w-8 h-8 cursor-pointer border-transparent hover:border-gray-500 rounded-lg border-2 px-0"
-                  onClick={handleAddUPoint}
-                />
-              </div>
+            <Accordion
+              type="single"
+              collapsible
+              className="w-full bg-[#303849] rounded-xl pr-3 pl-1"
+              defaultValue="locs"
+            >
+              <AccordionItem value="locs" className="border-b-0">
+                <AccordionTrigger className="hover:cursor-pointer hover:!no-underline">
+                  <div className="mr-2 flex flex-col items-center text-white bg-[#303849] rounded-xl gap-3 w-full ">
+                    <div className="flex gap-2 items-center w-full">
+                      <Trash2Icon
+                        className="cursor-pointer border-transparent hover:border-gray-500 rounded-lg border-2 p-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setUPoints([]); // Triggers useEffect to update loadedPath and localStorage
+                        }}
+                        size={32}
+                      />
+                      <input
+                        value={inp}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                        }}
+                        className="border-1 text-white p-2 rounded-lg bg-[#262b37] w-full focus:outline-none focus:ring-0 focus:border-transparent focus:shadow-none **:no-underline focus:**:no-underline active:**:no-underline hover:**:no-underline"
+                        placeholder="Lat, Long, Alt"
+                        style={{
+                          textDecoration: "none !important"
+                        }}
+                        onChange={(v) => setInp(v.target.value)}
+                        onKeyUp={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleAddUPoint();
+                          } else if (e.key === " "){
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }
+                        }}
+                      />
+                      <ArrowRightIcon
+                        className="w-8 h-8 cursor-pointer border-transparent hover:border-gray-500 rounded-lg border-2 px-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddUPoint();
+                        }}
+                      />
+                    </div>
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="space-y-3">
+                  
 
-              {[...UPoints].reverse().map((p, index) => (
-                <button
-                  key={`${p.lat}-${p.long}-${index}-${
-                    UPoints.length - 1 - index
-                  }`} // Ensure key is unique upon deletion
-                  onClick={() => {
-                    const originalIndex = UPoints.length - 1 - index;
-                    setUPoints((prevUPoints) =>
-                      prevUPoints.filter((_, i) => i !== originalIndex)
-                    );
-                  }}
-                  className="text-white bg-red-500 hover:bg-red-700 p-1 px-2 rounded"
-                >
-                  ({padStartNegative(p.lat, 3, "0")},{" "}
-                  {padStartNegative(p.long, 3, "0")}){" "}
-                  <X size={16} className="inline" />
-                </button>
-              ))}
-            </div>
+                  {/* Current Path Points */}
+                  {UPoints.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium text-gray-300 px-2">
+                        {loadedPath.name||"Current Path"} ({UPoints.length} points)
+                      </h3>
+                      <div className="space-y-1 max-h-48 overflow-y-auto">
+                        {[...UPoints].reverse().map((p, index) => {
+                          const originalIndex = UPoints.length - 1 - index;
+                          return (
+                            <div
+                              key={`${p.lat}-${p.long}-${index}-${originalIndex}`}
+                              className="flex items-center justify-between bg-[#262b37] rounded-lg p-2 mx-1 hover:bg-[#2a2f3c] transition-colors"
+                            >
+                              <span className="text-sm text-white font-mono">
+                                ({padStartNegative(p.lat, 3, "0")},{" "}
+                                {padStartNegative(p.long, 3, "0")})
+                              </span>
+                              <button
+                                onClick={() => {
+                                  setUPoints((prevUPoints) =>
+                                    prevUPoints.filter(
+                                      (_, i) => i !== originalIndex,
+                                    ),
+                                  );
+                                }}
+                                className="text-red-400 cursor-pointer hover:text-red-300 hover:bg-red-500/20 rounded p-1 transition-colors"
+                                title="Remove point"
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {/* History Component */}
+                  <div className={`${UPoints.length>0?"mt-4":""}`}>
+                    <History
+                      pointsArray={UPoints}
+                      setPointsArray={setUPoints}
+                      loadedPath={loadedPath}
+                      setLoadedPath={setLoadedPath}
+                    />
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
           </SidebarGroup>
           <SidebarGroup>
             <Accordion
@@ -440,7 +550,7 @@ function App() {
                   <p className="px-2 mt-1 w-full text-center">
                     {CPoints.length > 0
                       ? `${CPoints[0].lat.toFixed(
-                          2
+                          2,
                         )}, ${CPoints[0].long.toFixed(2)}`
                       : ""}
                   </p>
@@ -455,6 +565,7 @@ function App() {
               href="https://github.com/varphi-online/theislemap"
               target="_blank"
               className="h-10 w-10 flex items-center justify-center"
+              rel="noopener noreferrer"
             >
               <svg
                 role="img"
@@ -487,7 +598,12 @@ function App() {
               ? { url: "map-light.png", ...defaultMapLayerProps }
               : preferences.mapStyle === "imd"
               ? { url: "map-dark.png", ...defaultMapLayerProps }
-              : { url: "realmap.png", ...baseImageDimensions, lat: 2, long: 2 },
+              : {
+                  url: "realmap.png",
+                  ...baseImageDimensions,
+                  lat: 2,
+                  long: 2,
+                },
             ...(preferences.waterOverlay
               ? [{ url: "water.png", ...defaultMapLayerProps }]
               : []),
@@ -509,7 +625,7 @@ function App() {
           initialWidth={mapDisplayWidth}
           paths={[
             { path: CPoints, enabled: true, color: "black" },
-            { path: UPoints, enabled: true },
+            { ...loadedPath, path: UPoints, enabled: UPoints.length > 0 },
           ]}
           texts={
             preferences.locationLabels
