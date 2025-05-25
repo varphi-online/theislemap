@@ -51,6 +51,14 @@ export function PointsManager({
     onPointsChange(newPoints);
   };
 
+  // Create currentPath from current points state
+  const currentPath: Path = {
+    path: points,
+    enabled: points.length > 0,
+    name: undefined, // Current path is unnamed until saved
+    date: undefined, // Current path has no date until saved
+  };
+
   return (
     <Accordion
       type="single"
@@ -76,11 +84,14 @@ export function PointsManager({
           />
           <div className={`${points.length > 0 ? "mt-4" : ""}`}>
             <History
-                pointsArray={points}
-                setPointsArray={(value) => onPointsChange(Array.isArray(value) ? value : value(points))}
-                loadedPath={loadedPath}
-                setLoadedPath={setLoadedPath}
-              />
+              pointsArray={points}
+              setPointsArray={(value) =>
+                onPointsChange(Array.isArray(value) ? value : value(points))
+              }
+              loadedPath={loadedPath}
+              setLoadedPath={setLoadedPath}
+              currentPath={currentPath} // Add the missing currentPath prop
+            />
           </div>
         </AccordionContent>
       </AccordionItem>
