@@ -69,7 +69,7 @@ export default function History({
   pointsArray: readonly Location[]; // For reference if needed, but not directly modified
   setPointsArray: React.Dispatch<React.SetStateAction<Location[]>>;
   loadedPath: Path;
-  setLoadedPath: React.Dispatch<React.SetStateAction<Path>>;
+  setLoadedPath: (path: Path) => void;
 }) {
   const loadHistoryFromStorage = () => {
     return destringifyMap(localStorage.getItem("pathHistory") || "[]");

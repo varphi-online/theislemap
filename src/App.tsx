@@ -2,7 +2,6 @@
 import React, { useEffect, useRef, useState } from "react";
 
 import {
-  ArrowRightIcon,
   Bubbles,
   Building2,
   ClipboardCopy,
@@ -15,9 +14,7 @@ import {
   Settings,
   SidebarIcon,
   Tent,
-  Trash2Icon,
-  X,
-  Droplets, // Added for water toggle, or choose another
+  Droplets,
 } from "lucide-react";
 import { Switch } from "./components/ui/switch";
 import MapComponent from "./components/map/Map";
@@ -59,8 +56,9 @@ import {
 import { Slider } from "./components/ui/slider";
 import History, {
   addUpdatePath,
-  destringifyMap, // Import destringifyMap
+  destringifyMap,
 } from "./components/history";
+import { PointsManager } from "./components/points/PointsManager";
 
 export function parseLocationToTuple(inputStr: string): Location | null {
   if (typeof inputStr !== "string" || !(inputStr = inputStr.trim())) {
@@ -106,11 +104,6 @@ export function parseLocationToTuple(inputStr: string): Location | null {
 
   return null;
 }
-
-const padStartNegative = (n: number, l: number, p: string) => {
-  let s = "" + n.toFixed(0);
-  return s[0] == "-" ? "-" + s.slice(1).padStart(l, p) : s.padStart(l, p);
-};
 
 function Toggle({
   name,
@@ -169,7 +162,6 @@ function App() {
     () => getInitialPathState().path,
   );
   const [CPoints, setCPoints] = useState<Location[]>([]);
-  const [inp, setInp] = useState("");
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [mapDisplayWidth, setMapDisplayWidth] = useState(1000);
   const [lockMap, setLockMap] = useState(true);
@@ -191,6 +183,7 @@ function App() {
       migrationOverlay: false,
     },
   );
+
   useEffect(() => {
     localStorage.setItem("preferences", JSON.stringify(preferences));
   }, [preferences]);
@@ -200,20 +193,9 @@ function App() {
       setPreferences((prev: any) => ({ ...prev, [key]: checked }));
     };
 
-  const handleAddUPoint = () => {
-    if (inp.trim().length > 0) {
-      const tuple = parseLocationToTuple(inp);
-      if (tuple) {
-        setUPoints((o) => [...o, tuple]); // This will trigger the useEffect below
-        setInp("");
-      }
-    }
-  };
-
   useEffect(() => {
     if (cbLoc) {
-      setUPoints((o) => [...o, cbLoc]); // This will trigger the useEffect below
-      // setCbLock(undefined); // Optional: clear immediately after processing
+      setUPoints((o) => [...o, cbLoc]);
     }
   }, [cbLoc]);
 
@@ -305,107 +287,13 @@ function App() {
           }}
         >
           <SidebarGroup>
-            <Accordion
-              type="single"
-              collapsible
-              className="w-full bg-[#303849] rounded-xl pr-3 pl-1"
-              defaultValue="locs"
-            >
-              <AccordionItem value="locs" className="border-b-0">
-                <AccordionTrigger className="hover:cursor-pointer hover:!no-underline">
-                  <div className="mr-2 flex flex-col items-center text-white bg-[#303849] rounded-xl gap-3 w-full ">
-                    <div className="flex gap-2 items-center w-full">
-                      <Trash2Icon
-                        className="cursor-pointer border-transparent hover:border-gray-500 rounded-lg border-2 p-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setUPoints([]); // Triggers useEffect to update loadedPath and localStorage
-                        }}
-                        size={32}
-                      />
-                      <input
-                        value={inp}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                        }}
-                        className="border-1 text-white p-2 rounded-lg bg-[#262b37] w-full focus:outline-none focus:ring-0 focus:border-transparent focus:shadow-none **:no-underline focus:**:no-underline active:**:no-underline hover:**:no-underline"
-                        placeholder="Lat, Long, Alt"
-                        style={{
-                          textDecoration: "none !important"
-                        }}
-                        onChange={(v) => setInp(v.target.value)}
-                        onKeyUp={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            handleAddUPoint();
-                          } else if (e.key === " "){
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }
-                        }}
-                      />
-                      <ArrowRightIcon
-                        className="w-8 h-8 cursor-pointer border-transparent hover:border-gray-500 rounded-lg border-2 px-0"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAddUPoint();
-                        }}
-                      />
-                    </div>
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent className="space-y-3">
-                  
-
-                  {/* Current Path Points */}
-                  {UPoints.length > 0 && (
-                    <div className="space-y-2">
-                      <h3 className="text-sm font-medium text-gray-300 px-2">
-                        {loadedPath.name||"Current Path"} ({UPoints.length} points)
-                      </h3>
-                      <div className="space-y-1 max-h-48 overflow-y-auto">
-                        {[...UPoints].reverse().map((p, index) => {
-                          const originalIndex = UPoints.length - 1 - index;
-                          return (
-                            <div
-                              key={`${p.lat}-${p.long}-${index}-${originalIndex}`}
-                              className="flex items-center justify-between bg-[#262b37] rounded-lg p-2 mx-1 hover:bg-[#2a2f3c] transition-colors"
-                            >
-                              <span className="text-sm text-white font-mono">
-                                ({padStartNegative(p.lat, 3, "0")},{" "}
-                                {padStartNegative(p.long, 3, "0")})
-                              </span>
-                              <button
-                                onClick={() => {
-                                  setUPoints((prevUPoints) =>
-                                    prevUPoints.filter(
-                                      (_, i) => i !== originalIndex,
-                                    ),
-                                  );
-                                }}
-                                className="text-red-400 cursor-pointer hover:text-red-300 hover:bg-red-500/20 rounded p-1 transition-colors"
-                                title="Remove point"
-                              >
-                                <X size={14} />
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  {/* History Component */}
-                  <div className={`${UPoints.length>0?"mt-4":""}`}>
-                    <History
-                      pointsArray={UPoints}
-                      setPointsArray={setUPoints}
-                      loadedPath={loadedPath}
-                      setLoadedPath={setLoadedPath}
-                    />
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
+            <PointsManager
+              points={UPoints}
+              onPointsChange={setUPoints}
+              loadedPath={loadedPath}
+              setLoadedPath={setLoadedPath}
+              parseLocationToTuple={parseLocationToTuple}
+            />
           </SidebarGroup>
           <SidebarGroup>
             <Accordion
