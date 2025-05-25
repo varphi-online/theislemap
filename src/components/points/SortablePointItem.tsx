@@ -1,5 +1,4 @@
 // components/points/SortablePointItem.tsx
-import React from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, X } from "lucide-react";
@@ -23,8 +22,6 @@ export function SortablePointItem({
   point,
   index,
   onRemove,
-  isFirst,
-  isLast,
 }: SortablePointItemProps) {
   const {
     attributes,

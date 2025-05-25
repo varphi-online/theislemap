@@ -1,7 +1,6 @@
 // components/points/PointsInput.tsx
 import React from "react";
 import { ArrowRightIcon, Trash2Icon } from "lucide-react";
-import type { Location } from "../map/types";
 
 interface PointsInputProps {
   inputValue: string;

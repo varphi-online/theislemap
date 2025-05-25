@@ -1,5 +1,4 @@
 // components/points/PointsList.tsx
-import React from "react";
 import {
   DndContext,
   closestCenter,
