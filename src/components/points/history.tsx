@@ -1,5 +1,5 @@
 // components/history.tsx (updated with addUpdatePath restored)
-import type { Location, Path } from "./map/types";
+import type { Location, Path } from "../map/types";
 import { HistoryIcon } from "lucide-react";
 import {
   DialogContent,
@@ -7,10 +7,10 @@ import {
   DialogTrigger,
   DialogHeader,
   DialogTitle,
-} from "./ui/dialog";
+} from "../ui/dialog";
 import { useState } from "react";
 import { PathHistoryItem } from "./pathhistoryitem";
-import { Button } from "./ui/button";
+import { Button } from "../ui/button";
 import { SavePathDialog } from "./save-path-dialog";
 
 // stringifyMap and destringifyMap functions

@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/sortable";
 import { SortablePointItem } from "./SortablePointItem";
 import type { Location } from "../map/types";
+import { useEffect, useRef } from "react";
 
 interface PointsListProps {
   points: Location[];
@@ -34,22 +35,28 @@ export function PointsList({
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    }),
+    })
   );
+
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (active.id !== over?.id) {
-      const activeIndex = parseInt(
-        (active.id as string).replace("point-", ""),
-      );
+      const activeIndex = parseInt((active.id as string).replace("point-", ""));
       const overIndex = parseInt((over?.id as string).replace("point-", ""));
 
       const newPoints = arrayMove(points, activeIndex, overIndex);
       onReorderPoints(newPoints);
     }
   };
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [points]);
 
   if (points.length === 0) {
     return null;
@@ -60,7 +67,7 @@ export function PointsList({
       <h3 className="text-sm font-medium text-gray-300 px-2">
         {pathName || "Current Path"} ({points.length} points)
       </h3>
-      <div className="space-y-1 max-h-48 overflow-y-auto">
+      <div className="space-y-1 max-h-48 overflow-y-auto" ref={scrollRef}>
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}

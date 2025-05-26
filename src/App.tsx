@@ -57,7 +57,7 @@ import { Slider } from "./components/ui/slider";
 import {
   destringifyMap,
   addUpdatePath, // Use this instead of savePathToStorage
-} from "./components/history";
+} from "./components/points/history";
 import { PointsManager } from "./components/points/PointsManager";
 
 export function parseLocationToTuple(inputStr: string): Location | null {
@@ -70,7 +70,7 @@ export function parseLocationToTuple(inputStr: string): Location | null {
 
   // Format: (Lat: -12,345.67 Long: 98,765.43 Alt: ...)
   match = inputStr.match(
-    /\(Lat:\s*(-?[\d,]+(?:\.\d+)?)\s*Long:\s*(-?[\d,]+(?:\.\d+)?)(?:\s*Alt:.*)?\)/i,
+    /\(Lat:\s*(-?[\d,]+(?:\.\d+)?)\s*Long:\s*(-?[\d,]+(?:\.\d+)?)(?:\s*Alt:.*)?\)/i
   );
   if (
     match &&
@@ -82,7 +82,7 @@ export function parseLocationToTuple(inputStr: string): Location | null {
 
   // Format: -12345, 98765, ... (ignores third number if present)
   match = inputStr.match(
-    /^(-?[\d,]+(?:\.\d+)?)\s*,\s*(-?[\d,]+(?:\.\d+)?)\s*,\s*(-?[\d,]+(?:\.\d+)?)$/,
+    /^(-?[\d,]+(?:\.\d+)?)\s*,\s*(-?[\d,]+(?:\.\d+)?)\s*,\s*(-?[\d,]+(?:\.\d+)?)$/
   );
   if (
     match &&
@@ -103,6 +103,21 @@ export function parseLocationToTuple(inputStr: string): Location | null {
   }
 
   return null;
+}
+
+function InfoTip({ text }: { text: string }) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger className="text-[#8e98ac]">
+          <Info size={15} />
+        </TooltipTrigger>
+        <TooltipContent className="text-white bg-[#202632] max-w-[35ch] text-center px-0">
+          <p className="px-0 mx-0">{text}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 function Toggle({
@@ -127,28 +142,31 @@ function Toggle({
         <p>{name}</p>
       </div>
       <div className="flex items-center gap-2">
-        {tooltip && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger className="text-[#8e98ac]">
-                <Info size={15} />
-              </TooltipTrigger>
-              <TooltipContent className="text-white bg-[#202632] max-w-[35ch] text-center px-0">
-                <p className="px-0 mx-0">{tooltip}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
+        {tooltip && <InfoTip text={tooltip} />}
         <Switch checked={checked} onCheckedChange={setChecked} />
       </div>
     </div>
   );
 }
 
+interface Preferences {
+  mapStyle: "iml" | "imd" | "vuln";
+  gridlines: boolean;
+  locationLabels: boolean;
+  waterOverlay: boolean;
+  mudOverlay: boolean;
+  sanctuaryOverlay: boolean;
+  structureOverlay: boolean;
+  migrationOverlay: boolean;
+  lockMap: boolean;
+  monitorClip: boolean;
+  clipPollSpeed: number;
+}
+
 // Helper to get initial path from localStorage or a default
 const getInitialPathState = (): Path => {
   const historyMap = destringifyMap(
-    localStorage.getItem("pathHistory") || "[]",
+    localStorage.getItem("pathHistory") || "[]"
   );
   const latestPath = historyMap.get("latest");
   if (latestPath) {
@@ -158,30 +176,34 @@ const getInitialPathState = (): Path => {
 };
 
 function App() {
-  const [UPoints, setUPoints] = useState<Location[]>(
-    () => getInitialPathState().path,
+  const [userLocations, setUserLocations] = useState<Location[]>(
+    () => getInitialPathState().path
   );
-  const [CPoints, setCPoints] = useState<Location[]>([]);
+  const [cordexPoint, setCordexPoint] = useState<Location[]>([]);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const [mapDisplayWidth, setMapDisplayWidth] = useState(1000);
-  const [lockMap, setLockMap] = useState(true);
-  const [monitorClip, setMonitorClip] = useState(false);
-  const [cbLoc, setCbLock] = useState<Location>();
-  const [clipPollSpeed, setClipPollSpeed] = useState(250);
+
+  const [clipboardLocation, setClipboardLocation] = useState<Location>();
   const [loadedPath, setLoadedPath] = useState<Path>(getInitialPathState);
 
   /** PREFERENCES */
   const [preferences, setPreferences] = useState(
-    JSON.parse(localStorage.getItem("preferences") || "null") || {
-      mapStyle: "iml",
-      gridlines: false,
-      locationLabels: true,
-      waterOverlay: true,
-      mudOverlay: false,
-      sanctuaryOverlay: false,
-      structureOverlay: false,
-      migrationOverlay: false,
-    },
+    (JSON.parse(
+      localStorage.getItem("preferences") || "null"
+    ) as Preferences | null) ||
+      ({
+        mapStyle: "iml",
+        gridlines: false,
+        locationLabels: true,
+        waterOverlay: true,
+        mudOverlay: false,
+        sanctuaryOverlay: false,
+        structureOverlay: false,
+        migrationOverlay: false,
+        lockMap: true,
+        monitorClip: false,
+        clipPollSpeed: 250,
+      } satisfies Preferences)
   );
 
   useEffect(() => {
@@ -189,28 +211,28 @@ function App() {
   }, [preferences]);
 
   const handlePreferenceChange =
-    (key: keyof typeof preferences) => (checked: boolean) => {
+    (key: keyof Preferences) => (checked: boolean) => {
       setPreferences((prev: any) => ({ ...prev, [key]: checked }));
     };
 
   useEffect(() => {
-    if (cbLoc) {
-      setUPoints((o) => [...o, cbLoc]);
+    if (clipboardLocation) {
+      setUserLocations((o) => [...o, clipboardLocation]);
     }
-  }, [cbLoc]);
+  }, [clipboardLocation]);
 
   // Effect to synchronize UPoints with loadedPath and localStorage ("latest" path)
   useEffect(() => {
-    const uPointsStr = JSON.stringify(UPoints);
+    const uPointsStr = JSON.stringify(userLocations);
     const loadedPathStr = JSON.stringify(loadedPath.path);
-    const uPointsEnabled = UPoints.length > 0;
+    const uPointsEnabled = userLocations.length > 0;
 
     if (loadedPath.date) {
       // A named/dated path is loaded
       if (uPointsStr !== loadedPathStr) {
         // User has modified the named path; transition to a new "latest" state
         const newLatestPath: Path = {
-          path: UPoints,
+          path: userLocations,
           enabled: uPointsEnabled,
           name: undefined,
           date: undefined,
@@ -223,7 +245,7 @@ function App() {
       // "latest" path is loaded (or no path/default path)
       const newLatestState: Path = {
         ...loadedPath,
-        path: UPoints,
+        path: userLocations,
         enabled: uPointsEnabled,
         name: undefined, // Ensure "latest" path has no name/date
         date: undefined,
@@ -239,7 +261,7 @@ function App() {
       }
       addUpdatePath(newLatestState); // Use addUpdatePath for "latest" saves
     }
-  }, [UPoints, loadedPath, setLoadedPath]);
+  }, [userLocations, loadedPath, setLoadedPath]);
 
   useEffect(() => {
     const containerElement = mapContainerRef.current;
@@ -269,9 +291,9 @@ function App() {
   return (
     <SidebarProvider className="flex relative">
       <ClipboardMonitor
-        enabled={monitorClip}
-        setClipboardContents={setCbLock}
-        pollrate={clipPollSpeed}
+        enabled={preferences.monitorClip}
+        setClipboardContents={setClipboardLocation}
+        pollrate={preferences.clipPollSpeed}
       />
       <Sidebar className="border-r-[#303849]">
         <SidebarHeader className="w-full text-center font-medium text-xl">
@@ -288,8 +310,8 @@ function App() {
         >
           <SidebarGroup>
             <PointsManager
-              points={UPoints}
-              onPointsChange={setUPoints}
+              points={userLocations}
+              onPointsChange={setUserLocations}
               loadedPath={loadedPath}
               setLoadedPath={setLoadedPath}
               parseLocationToTuple={parseLocationToTuple}
@@ -385,22 +407,22 @@ function App() {
                   </Toggle>
                   <Toggle
                     name="Lock Map"
-                    checked={lockMap}
-                    setChecked={setLockMap}
+                    checked={preferences.lockMap}
+                    setChecked={handlePreferenceChange("lockMap")}
                   >
                     <EarthLock />
                   </Toggle>
                   <Toggle
                     name="Monitor Cliboard"
-                    checked={monitorClip}
-                    setChecked={setMonitorClip}
+                    checked={preferences.monitorClip}
+                    setChecked={handlePreferenceChange("monitorClip")}
                     tooltip={
                       "When window is focused, if the contents of the system clipboard are valid coordinates, will add to the most recent path used."
                     }
                   >
                     <ClipboardCopy />
                   </Toggle>
-                  {monitorClip && (
+                  {preferences.monitorClip && (
                     <div className="flex ml-2 gap-2 text-xs items-center text-nowrap">
                       PollRate (ms)
                       <Slider
@@ -408,10 +430,15 @@ function App() {
                         max={1000}
                         min={10}
                         step={20}
-                        value={[clipPollSpeed]}
-                        onValueChange={(v) => setClipPollSpeed(v[0])}
+                        value={[preferences.clipPollSpeed]}
+                        onValueChange={(v) =>
+                          setPreferences({
+                            ...preferences,
+                            clipPollSpeed: v[0],
+                          })
+                        }
                       />
-                      {clipPollSpeed}
+                      {preferences.clipPollSpeed}
                     </div>
                   )}
                 </AccordionContent>
@@ -432,14 +459,14 @@ function App() {
                 </AccordionTriggerForce>
                 <AccordionContentForce className="pb-1">
                   <LiveNumericScreenOCR
-                    numberTuples={CPoints}
-                    setNumberTuples={setCPoints}
+                    numberTuples={cordexPoint}
+                    setNumberTuples={setCordexPoint}
                   />
                   <p className="px-2 mt-1 w-full text-center">
-                    {CPoints.length > 0
-                      ? `${CPoints[0].lat.toFixed(
-                          2,
-                        )}, ${CPoints[0].long.toFixed(2)}`
+                    {cordexPoint.length > 0
+                      ? `${cordexPoint[0].lat.toFixed(
+                          2
+                        )}, ${cordexPoint[0].long.toFixed(2)}`
                       : ""}
                   </p>
                 </AccordionContentForce>
@@ -476,7 +503,9 @@ function App() {
 
       <div
         className={
-          lockMap ? "absolute left-0 top-0 h-[100vh] w-[100vw]" : "flex-1 grow"
+          preferences.lockMap
+            ? "absolute left-0 top-0 h-[100vh] w-[100vw]"
+            : "flex-1 grow"
         }
         ref={mapContainerRef}
       >
@@ -512,8 +541,12 @@ function App() {
           initialHeight={window.innerHeight}
           initialWidth={mapDisplayWidth}
           paths={[
-            { path: CPoints, enabled: true, color: "black" },
-            { ...loadedPath, path: UPoints, enabled: UPoints.length > 0 },
+            { path: cordexPoint, enabled: true, color: "black" },
+            {
+              ...loadedPath,
+              path: userLocations,
+              enabled: userLocations.length > 0,
+            },
           ]}
           texts={
             preferences.locationLabels

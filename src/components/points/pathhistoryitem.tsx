@@ -1,7 +1,7 @@
 // components/pathhistoryitem.tsx (simplified)
-import type { Path } from "./map/types";
-import { Button } from "./ui/button";
-import { DialogClose } from "./ui/dialog";
+import type { Path } from "../map/types";
+import { Button } from "../ui/button";
+import { DialogClose } from "../ui/dialog";
 import { Trash2, MapPin } from "lucide-react";
 
 interface PathHistoryItemProps {

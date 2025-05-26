@@ -67,7 +67,7 @@ export default function MapComponent({
   // Use refs for values that don't need to trigger re-renders
   const mouseStartRef = useRef<[number, number]>([0, 0]);
   const initialScreenTargetOnDragRef = useRef<[number, number]>([0, 0]);
-  const animationFrameRef = useRef<number|undefined>(undefined);
+  const animationFrameRef = useRef<number | undefined>(undefined);
 
   const [pulseRadius, setPulseRadius] = useState(0);
   const [pulseOpacity, setPulseOpacity] = useState(1);
@@ -79,31 +79,33 @@ export default function MapComponent({
   );
 
   // Memoize derived values
-  const { initialBounds, zoomLog, worldBounds } =
-    useMemo(() => {
-      const aspectRatio = canvasSize.width === 0 ? 1 : canvasSize.height / canvasSize.width;
-      const halfWidth = INITIAL_VIEW_WORLD_HALF_WIDTH;
-      const halfHeight = halfWidth * aspectRatio;
-      const bounds = [-halfWidth, halfWidth, -halfHeight, halfHeight];
-      const zoomLogValue = Math.pow(2, zoom);
-      const inverseZL = 1 / zoomLogValue;
-      const wBounds = [
-        screenTarget[0] + bounds[0] * inverseZL,
-        screenTarget[0] + bounds[1] * inverseZL,
-        screenTarget[1] + bounds[2] * inverseZL,
-        screenTarget[1] + bounds[3] * inverseZL,
-      ];
+  const { initialBounds, zoomLog, worldBounds } = useMemo(() => {
+    const aspectRatio =
+      canvasSize.width === 0 ? 1 : canvasSize.height / canvasSize.width;
+    const halfWidth = INITIAL_VIEW_WORLD_HALF_WIDTH;
+    const halfHeight = halfWidth * aspectRatio;
+    const bounds = [-halfWidth, halfWidth, -halfHeight, halfHeight];
+    const zoomLogValue = Math.pow(2, zoom);
+    const inverseZL = 1 / zoomLogValue;
+    const wBounds = [
+      screenTarget[0] + bounds[0] * inverseZL,
+      screenTarget[0] + bounds[1] * inverseZL,
+      screenTarget[1] + bounds[2] * inverseZL,
+      screenTarget[1] + bounds[3] * inverseZL,
+    ];
 
-      return {
-        canvasAspectRatio: aspectRatio,
-        initialBounds: bounds,
-        zoomLog: zoomLogValue,
-        worldBounds: wBounds,
-      };
-    }, [canvasSize, zoom, screenTarget]);
+    return {
+      canvasAspectRatio: aspectRatio,
+      initialBounds: bounds,
+      zoomLog: zoomLogValue,
+      worldBounds: wBounds,
+    };
+  }, [canvasSize, zoom, screenTarget]);
 
   const panSpeedFactor = useMemo(() => {
-    return canvasSize.width === 0 ? 0.01 : (2 * INITIAL_VIEW_WORLD_HALF_WIDTH) / canvasSize.width;
+    return canvasSize.width === 0
+      ? 0.01
+      : (2 * INITIAL_VIEW_WORLD_HALF_WIDTH) / canvasSize.width;
   }, [canvasSize.width]);
 
   // Memoize coordinate transformation
@@ -144,7 +146,11 @@ export default function MapComponent({
           error: undefined,
         };
 
-        if (img.src !== url || currentEntry?.status === "error" || !img.src) {
+        if (
+          img.src !== url ||
+          currentEntry?.status === "error" ||
+          !img.src
+        ) {
           img.onload = () => {
             setImageEntries((prev) => ({
               ...prev,
@@ -292,24 +298,34 @@ export default function MapComponent({
         viewDimensionWorld: number,
         scaleFactorSeed: number
       ) => {
-        const opts = [100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01];
-        const heuristicLimit = viewDimensionWorld / GRID_TARGET_LINES_ON_SCREEN;
+        const opts = [
+          100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01,
+        ];
+        const heuristicLimit =
+          viewDimensionWorld / GRID_TARGET_LINES_ON_SCREEN;
         for (let j = 0; j < opts.length - 1; j++) {
           const stepCandidate = opts[j] * scaleFactorSeed;
           if (stepCandidate < heuristicLimit && stepCandidate > 0) {
             return stepCandidate;
           }
         }
-        return Math.max(opts[opts.length - 1] * scaleFactorSeed, Number.EPSILON);
+        return Math.max(
+          opts[opts.length - 1] * scaleFactorSeed,
+          Number.EPSILON
+        );
       };
 
       const scaleFactorX = Math.pow(
         10,
-        Math.floor(Math.log10(Math.max(currentGraphWorldWidth, Number.EPSILON)))
+        Math.floor(
+          Math.log10(Math.max(currentGraphWorldWidth, Number.EPSILON))
+        )
       );
       const scaleFactorY = Math.pow(
         10,
-        Math.floor(Math.log10(Math.max(currentGraphWorldHeight, Number.EPSILON)))
+        Math.floor(
+          Math.log10(Math.max(currentGraphWorldHeight, Number.EPSILON))
+        )
       );
       const xScale = getGridlineStep(currentGraphWorldWidth, scaleFactorX);
       const yScale = getGridlineStep(currentGraphWorldHeight, scaleFactorY);
@@ -327,7 +343,10 @@ export default function MapComponent({
       // Draw vertical grid lines
       for (let i = -GRID_LINE_LOOP_COUNT; i <= GRID_LINE_LOOP_COUNT; i++) {
         const worldX = xScale * i + superFloor(xScale, screenTarget[0]);
-        if (worldX < worldBounds[0] - xScale || worldX > worldBounds[1] + xScale)
+        if (
+          worldX < worldBounds[0] - xScale ||
+          worldX > worldBounds[1] + xScale
+        )
           continue;
         const screenPos = toScreenspace(worldX, 0);
         const isOriginLine = Math.abs(worldX) < xScale * 0.001;
@@ -335,15 +354,22 @@ export default function MapComponent({
         ctx.moveTo(screenPos[0], 0);
         ctx.lineTo(screenPos[0], canvasSize.height);
         ctx.lineWidth = isOriginLine ? 1.2 : 0.5;
-        ctx.strokeStyle = isOriginLine ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.25)";
+        ctx.strokeStyle = isOriginLine
+          ? "rgba(0,0,0,0.5)"
+          : "rgba(0,0,0,0.25)";
         ctx.stroke();
 
-        if (Math.abs(screenPos[0] - worldOriginScreen[0]) > 5 || !isOriginLine) {
+        if (
+          Math.abs(screenPos[0] - worldOriginScreen[0]) > 5 ||
+          !isOriginLine
+        ) {
           let textVal = worldX;
           textVal =
             precision(textVal) === 0
               ? Math.round(textVal)
-              : parseFloat(textVal.toFixed(Math.max(0, precision(xScale) + 1)));
+              : parseFloat(
+                  textVal.toFixed(Math.max(0, precision(xScale) + 1))
+                );
           if (Math.abs(textVal) < xScale / 10000 && textVal !== 0) continue;
           const textYPos = Math.min(
             Math.max(worldOriginScreen[1] + 15, 15),
@@ -358,7 +384,10 @@ export default function MapComponent({
       // Draw horizontal grid lines
       for (let i = -GRID_LINE_LOOP_COUNT; i <= GRID_LINE_LOOP_COUNT; i++) {
         const worldY = yScale * i + superFloor(yScale, screenTarget[1]);
-        if (worldY < worldBounds[2] - yScale || worldY > worldBounds[3] + yScale)
+        if (
+          worldY < worldBounds[2] - yScale ||
+          worldY > worldBounds[3] + yScale
+        )
           continue;
         const screenPos = toScreenspace(0, worldY);
         const isOriginLine = Math.abs(worldY) < yScale * 0.001;
@@ -366,15 +395,22 @@ export default function MapComponent({
         ctx.moveTo(0, screenPos[1]);
         ctx.lineTo(canvasSize.width, screenPos[1]);
         ctx.lineWidth = isOriginLine ? 1.2 : 0.5;
-        ctx.strokeStyle = isOriginLine ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.25)";
+        ctx.strokeStyle = isOriginLine
+          ? "rgba(0,0,0,0.5)"
+          : "rgba(0,0,0,0.25)";
         ctx.stroke();
 
-        if (Math.abs(screenPos[1] - worldOriginScreen[1]) > 5 || !isOriginLine) {
+        if (
+          Math.abs(screenPos[1] - worldOriginScreen[1]) > 5 ||
+          !isOriginLine
+        ) {
           let textVal = worldY;
           textVal =
             precision(textVal) === 0
               ? Math.round(textVal)
-              : parseFloat(textVal.toFixed(Math.max(0, precision(yScale) + 1)));
+              : parseFloat(
+                  textVal.toFixed(Math.max(0, precision(yScale) + 1))
+                );
           if (Math.abs(textVal) < yScale / 10000 && textVal !== 0) continue;
           let textAlign: CanvasTextAlign = "right";
           let textXPos = worldOriginScreen[0] - 7;
@@ -395,10 +431,16 @@ export default function MapComponent({
 
       // Draw origin axes
       ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
-      if (worldOriginScreen[0] >= 0 && worldOriginScreen[0] <= canvasSize.width) {
+      if (
+        worldOriginScreen[0] >= 0 &&
+        worldOriginScreen[0] <= canvasSize.width
+      ) {
         ctx.fillRect(worldOriginScreen[0] - 0.75, 0, 1.5, canvasSize.height);
       }
-      if (worldOriginScreen[1] >= 0 && worldOriginScreen[1] <= canvasSize.height) {
+      if (
+        worldOriginScreen[1] >= 0 &&
+        worldOriginScreen[1] <= canvasSize.height
+      ) {
         ctx.fillRect(0, worldOriginScreen[1] - 0.75, canvasSize.width, 1.5);
       }
 
@@ -407,10 +449,18 @@ export default function MapComponent({
       ctx.strokeStyle = "rgba(0,0,0,0.4)";
       const minorXStep = xScale / 5;
       if (minorXStep > 0 && minorXStep > Number.EPSILON * 100) {
-        for (let i = -GRID_LINE_LOOP_COUNT * 5; i <= GRID_LINE_LOOP_COUNT * 5; i++) {
-          const worldX = minorXStep * i + superFloor(minorXStep, screenTarget[0]);
+        for (
+          let i = -GRID_LINE_LOOP_COUNT * 5;
+          i <= GRID_LINE_LOOP_COUNT * 5;
+          i++
+        ) {
+          const worldX =
+            minorXStep * i + superFloor(minorXStep, screenTarget[0]);
           if (Math.abs(worldX % xScale) < minorXStep * 0.01) continue;
-          if (worldX < worldBounds[0] - minorXStep || worldX > worldBounds[1] + minorXStep)
+          if (
+            worldX < worldBounds[0] - minorXStep ||
+            worldX > worldBounds[1] + minorXStep
+          )
             continue;
           const screenX = toScreenspace(worldX, 0)[0];
           ctx.beginPath();
@@ -422,10 +472,18 @@ export default function MapComponent({
 
       const minorYStep = yScale / 5;
       if (minorYStep > 0 && minorYStep > Number.EPSILON * 100) {
-        for (let i = -GRID_LINE_LOOP_COUNT * 5; i <= GRID_LINE_LOOP_COUNT * 5; i++) {
-          const worldY = minorYStep * i + superFloor(minorYStep, screenTarget[1]);
+        for (
+          let i = -GRID_LINE_LOOP_COUNT * 5;
+          i <= GRID_LINE_LOOP_COUNT * 5;
+          i++
+        ) {
+          const worldY =
+            minorYStep * i + superFloor(minorYStep, screenTarget[1]);
           if (Math.abs(worldY % yScale) < minorYStep * 0.01) continue;
-          if (worldY < worldBounds[2] - minorYStep || worldY > worldBounds[3] + minorYStep)
+          if (
+            worldY < worldBounds[2] - minorYStep ||
+            worldY > worldBounds[3] + minorYStep
+          )
             continue;
           const screenY = toScreenspace(0, worldY)[1];
           ctx.beginPath();
@@ -553,40 +611,15 @@ export default function MapComponent({
     canvasSize,
   ]);
 
-  // Optimized mouse event handlers
-  const handleMouseDown = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
-    setIsDragging(true);
-    mouseStartRef.current = [event.clientX, event.clientY];
-    initialScreenTargetOnDragRef.current = [...screenTarget];
-    event.currentTarget.style.cursor = "grabbing";
-  }, [screenTarget]);
-
-  const handleMouseMove = useCallback(
-    (event: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!isDragging) return;
-      const dx = event.clientX - mouseStartRef.current[0];
-      const dy = event.clientY - mouseStartRef.current[1];
-      const worldUnitsPerPixel = panSpeedFactor / zoomLog;
-      setScreenTarget([
-        initialScreenTargetOnDragRef.current[0] - dx * worldUnitsPerPixel,
-        initialScreenTargetOnDragRef.current[1] - dy * worldUnitsPerPixel,
-      ]);
-    },
-    [isDragging, zoomLog, panSpeedFactor]
-  );
-
-  const handleMouseUpOrLeave = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (isDragging) {
-      setIsDragging(false);
-      event.currentTarget.style.cursor = "grab";
-    }
-  }, [isDragging]);
-
+  // Wheel event handler
   const handleWheel = useCallback(
-    (event: React.WheelEvent<HTMLCanvasElement>) => {
+    (event: WheelEvent) => {
       event.preventDefault();
       const zoomAmount = event.deltaY * -0.001;
-      const canvasRect = event.currentTarget.getBoundingClientRect();
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const canvasRect = canvas.getBoundingClientRect();
       const mouseX = event.clientX - canvasRect.left;
       const mouseY = event.clientY - canvasRect.top;
 
@@ -606,15 +639,65 @@ export default function MapComponent({
 
       const newScreenTargetX =
         worldMouseXBeforeZoom -
-        (initialBounds[0] + (initialBounds[1] - initialBounds[0]) * normMouseX) / newZoomLog;
+        (initialBounds[0] +
+          (initialBounds[1] - initialBounds[0]) * normMouseX) /
+          newZoomLog;
       const newScreenTargetY =
         worldMouseYBeforeZoom -
-        (initialBounds[2] + (initialBounds[3] - initialBounds[2]) * normMouseY) / newZoomLog;
+        (initialBounds[2] +
+          (initialBounds[3] - initialBounds[2]) * normMouseY) /
+          newZoomLog;
 
       setZoom(newZoom);
       setScreenTarget([newScreenTargetX, newScreenTargetY]);
     },
     [zoom, worldBounds, canvasSize, initialBounds]
+  );
+
+  // Add wheel event listener with passive: false
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    canvas.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      canvas.removeEventListener("wheel", handleWheel);
+    };
+  }, [handleWheel]);
+
+  // Optimized mouse event handlers
+  const handleMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      setIsDragging(true);
+      mouseStartRef.current = [event.clientX, event.clientY];
+      initialScreenTargetOnDragRef.current = [...screenTarget];
+      event.currentTarget.style.cursor = "grabbing";
+    },
+    [screenTarget]
+  );
+
+  const handleMouseMove = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!isDragging) return;
+      const dx = event.clientX - mouseStartRef.current[0];
+      const dy = event.clientY - mouseStartRef.current[1];
+      const worldUnitsPerPixel = panSpeedFactor / zoomLog;
+      setScreenTarget([
+        initialScreenTargetOnDragRef.current[0] - dx * worldUnitsPerPixel,
+        initialScreenTargetOnDragRef.current[1] - dy * worldUnitsPerPixel,
+      ]);
+    },
+    [isDragging, zoomLog, panSpeedFactor]
+  );
+
+  const handleMouseUpOrLeave = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (isDragging) {
+        setIsDragging(false);
+        event.currentTarget.style.cursor = "grab";
+      }
+    },
+    [isDragging]
   );
 
   // Global mouse up handler
@@ -638,7 +721,6 @@ export default function MapComponent({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUpOrLeave}
       onMouseLeave={handleMouseUpOrLeave}
-      onWheel={handleWheel}
       style={{
         border: "1px solid black",
         cursor: "grab",

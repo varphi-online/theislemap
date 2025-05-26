@@ -1,6 +1,6 @@
 // components/save-path-dialog.tsx
 import React, { useState } from "react";
-import type { Path } from "./map/types";
+import type { Path } from "../map/types";
 import {
   Dialog,
   DialogContent,
@@ -8,17 +8,17 @@ import {
   DialogHeader,
   DialogTitle,
   DialogClose,
-} from "./ui/dialog";
+} from "../ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "./ui/select";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { Label } from "./ui/label";
+} from "../ui/select";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
 import { Save } from "lucide-react";
 import { destringifyMap, stringifyMap } from "./history";
 

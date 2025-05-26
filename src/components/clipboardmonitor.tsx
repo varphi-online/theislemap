@@ -66,11 +66,6 @@ function ClipboardMonitor({
         }
       }
     } catch (er: any) {
-      console.error(
-        "Error reading clipboard (will retry):",
-        er.name,
-        er.message
-      );
     }
   }, [setCb, clrInt]); // parseLocationToTuple is stable
 

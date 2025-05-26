@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/accordion";
 import { PointsInput } from "./PointsInput";
 import { PointsList } from "./PointsList";
-import History from "../history";
+import History from "./history";
 import type { Location, Path } from "../map/types";
 
 interface PointsManagerProps {
