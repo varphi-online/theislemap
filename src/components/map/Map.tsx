@@ -5,7 +5,7 @@ import React, {
   useCallback,
   useMemo,
 } from "react";
-import type { MapImage, MapText, Path } from "./types";
+import type { MapImage, MapText, Path, Shape } from "./types";
 
 // --- Constants for configuration ---
 const INITIAL_VIEW_WORLD_HALF_WIDTH = 10;
@@ -45,6 +45,7 @@ interface Props {
   paths?: Path[];
   texts?: MapText[];
   doDrawGrid: boolean;
+  shapes?: Shape[];
 }
 
 export default function MapComponent({
@@ -54,6 +55,7 @@ export default function MapComponent({
   paths = [],
   texts = [],
   doDrawGrid,
+  shapes = []
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [imageEntries, setImageEntries] = useState<Record<string, ImageEntry>>(
@@ -559,6 +561,47 @@ export default function MapComponent({
     [toScreenspace]
   );
 
+const drawShape = useCallback(
+  (ctx: CanvasRenderingContext2D, shape: Shape) => {
+    if (!shape || !shape.location) return;
+
+    ctx.save();
+    const [centerX, centerY] = toScreenspace(
+      shape.location.long,
+      shape.location.lat
+    );
+
+    const currentWorldWidth = worldBounds[1] - worldBounds[0];
+    const currentWorldHeight = worldBounds[3] - worldBounds[2];
+
+    const worldToScreenScaleX = canvasSize.width / currentWorldWidth;
+    const worldToScreenScaleY = canvasSize.height / currentWorldHeight;
+
+    const screenWidth = shape.width * worldToScreenScaleX;
+    const screenHeight = shape.height * worldToScreenScaleY;
+
+    ctx.translate(centerX, centerY);
+    ctx.rotate(shape.rotation);
+
+    ctx.beginPath();
+
+    if (shape.shape === "ellipse") ctx.ellipse(0, 0, screenWidth / 2, screenHeight / 2, 0, 0, 2 * Math.PI);
+    else if (shape.shape === "rectangle") ctx.rect(-screenWidth / 2, -screenHeight / 2, screenWidth, screenHeight);
+
+    ctx.fillStyle = shape.color?.toString() || "green";
+    ctx.globalAlpha = 0.3;
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = shape.color?.toString() || "green";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.restore();
+  },
+  [toScreenspace, worldBounds, canvasSize]
+);
+
   // Pulse animation effect
   useEffect(() => {
     if (paths.length === 0 || paths.every((p) => p.path.length === 0)) {
@@ -598,6 +641,7 @@ export default function MapComponent({
 
     drawImages(ctx);
     if (doDrawGrid) drawGrid(ctx);
+    shapes.forEach((shape)=>drawShape(ctx,shape))
     texts.forEach((text) => drawText(ctx, text));
     paths.forEach((path) => drawPath(ctx, path));
   }, [
@@ -605,9 +649,11 @@ export default function MapComponent({
     drawGrid,
     drawText,
     drawPath,
+    drawShape,
     doDrawGrid,
     texts,
     paths,
+    shapes,
     canvasSize,
   ]);
 

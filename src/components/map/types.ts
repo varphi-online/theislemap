@@ -27,3 +27,12 @@ export type Path = {
   name?: string;
   date?: Date
 };
+
+export interface Shape {
+  shape: "ellipse" | "rectangle";
+  location: Location;
+  height: number;
+  width: number;
+  rotation: number;
+  color: CSSProperties["color"]
+}
