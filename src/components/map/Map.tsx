@@ -16,7 +16,7 @@ const LAST_POINT_PULSE_MAX_RADIUS = 30;
 const LAST_POINT_PULSE_SPEED = 0.06;
 const FONT = "Arial";
 
-// Helper functions (moved outside to avoid recreation)
+// Helper functions
 const superFloor = (mult: number, val: number): number => {
   return mult * Math.floor(val / mult);
 };
@@ -32,20 +32,24 @@ const precision = (a: number): number => {
   return p;
 };
 
+const getDistance = (touch1: React.Touch, touch2: React.Touch): number => {
+  return Math.sqrt(
+    Math.pow(touch2.clientX - touch1.clientX, 2) +
+      Math.pow(touch2.clientY - touch1.clientY, 2)
+  );
+};
+
+const getTouchCenter = (touch1: React.Touch, touch2: React.Touch): [number, number] => {
+  return [
+    (touch1.clientX + touch2.clientX) / 2,
+    (touch1.clientY + touch2.clientY) / 2,
+  ];
+};
+
 interface ImageEntry {
   element?: HTMLImageElement;
   status: "pending" | "loading" | "loaded" | "error";
   error?: string;
-}
-
-interface Props {
-  images: MapImage[];
-  initialWidth?: number;
-  initialHeight?: number;
-  paths?: Path[];
-  texts?: MapText[];
-  doDrawGrid: boolean;
-  shapes?: Shape[];
 }
 
 export default function MapComponent({
@@ -55,9 +59,16 @@ export default function MapComponent({
   paths = [],
   texts = [],
   doDrawGrid,
-  shapes = []
-}: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  shapes = [],
+}: {
+  images: MapImage[];
+  initialWidth?: number;
+  initialHeight?: number;
+  paths?: Path[];
+  texts?: MapText[];
+  doDrawGrid: boolean;
+  shapes?: Shape[];
+}) {
   const [imageEntries, setImageEntries] = useState<Record<string, ImageEntry>>(
     {}
   );
@@ -66,19 +77,39 @@ export default function MapComponent({
   const [screenTarget, setScreenTarget] = useState<[number, number]>([0, 0]);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Use refs for values that don't need to trigger re-renders
+  // Touch-specific state
+  const [isMultiTouch, setIsMultiTouch] = useState(false);
+  const [lastTouchDistance, setLastTouchDistance] = useState(0);
+  const [touchStartScreenTarget, setTouchStartScreenTarget] = useState<
+    [number, number]
+  >([0, 0]);
+
+  // Refs
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseStartRef = useRef<[number, number]>([0, 0]);
   const initialScreenTargetOnDragRef = useRef<[number, number]>([0, 0]);
   const animationFrameRef = useRef<number | undefined>(undefined);
+  const pulseRadiusRef = useRef(0);
+  const pulseOpacityRef = useRef(1);
+  const lastDrawTimeRef = useRef(0);
 
-  const [pulseRadius, setPulseRadius] = useState(0);
-  const [pulseOpacity, setPulseOpacity] = useState(1);
+  // Touch refs
+  const touchStartRef = useRef<[number, number]>([0, 0]);
+  const lastTouchCenterRef = useRef<[number, number]>([0, 0]);
 
-  // Memoize canvas size
-  const canvasSize = useMemo(
-    () => ({ width: initialWidth, height: initialHeight }),
-    [initialWidth, initialHeight]
-  );
+  const canvasSize = useMemo(() => {
+    // Use viewport dimensions on mobile if no explicit size provided
+    if (typeof window !== "undefined") {
+      const isMobile = window.innerWidth < 768;
+      if (isMobile) {
+        return {
+          width: window.innerWidth,
+          height: window.innerHeight,
+        };
+      }
+    }
+    return { width: initialWidth, height: initialHeight };
+  }, [initialWidth, initialHeight]);
 
   // Memoize derived values
   const { initialBounds, zoomLog, worldBounds } = useMemo(() => {
@@ -110,7 +141,6 @@ export default function MapComponent({
       : (2 * INITIAL_VIEW_WORLD_HALF_WIDTH) / canvasSize.width;
   }, [canvasSize.width]);
 
-  // Memoize coordinate transformation
   const toScreenspace = useCallback(
     (worldX: number, worldY: number): [number, number] => {
       const currentWorldWidth = worldBounds[1] - worldBounds[0];
@@ -123,7 +153,6 @@ export default function MapComponent({
     [worldBounds, canvasSize]
   );
 
-  // Optimized image loading effect
   const imageUrls = useMemo(() => images.map((img) => img.url), [images]);
   const imageUrlsString = imageUrls.join(",");
 
@@ -148,11 +177,7 @@ export default function MapComponent({
           error: undefined,
         };
 
-        if (
-          img.src !== url ||
-          currentEntry?.status === "error" ||
-          !img.src
-        ) {
+        if (img.src !== url || currentEntry?.status === "error" || !img.src) {
           img.onload = () => {
             setImageEntries((prev) => ({
               ...prev,
@@ -191,7 +216,7 @@ export default function MapComponent({
         return updatedEntries;
       });
     }
-  }, [imageUrlsString]); // Use string dependency to avoid array reference changes
+  }, [imageUrlsString]);
 
   // Canvas setup effect
   useEffect(() => {
@@ -208,7 +233,7 @@ export default function MapComponent({
     }
   }, [canvasSize]);
 
-  // Memoized drawing functions
+  // Memoized drawing functions (keeping all the existing drawing functions unchanged)
   const drawImages = useCallback(
     (ctx: CanvasRenderingContext2D) => {
       let anyLoading = false;
@@ -260,7 +285,6 @@ export default function MapComponent({
         }
       });
 
-      // Handle loading/error states
       if (anyLoading && drawnImageCount === 0 && images.length > 0) {
         ctx.fillStyle = "lightgray";
         ctx.fillRect(0, 0, canvasSize.width, canvasSize.height);
@@ -278,9 +302,9 @@ export default function MapComponent({
         ctx.textAlign = "center";
         let message = "No images to display.";
         if (errorUrls.length > 0) {
-          message = `Failed to load: ${errorUrls
-            .slice(0, 3)
-            .join(", ")}${errorUrls.length > 3 ? "..." : ""}`;
+          message = `Failed to load: ${errorUrls.slice(0, 3).join(", ")}${
+            errorUrls.length > 3 ? "..." : ""
+          }`;
         }
         ctx.fillText(message, canvasSize.width / 2, canvasSize.height / 2);
       }
@@ -303,8 +327,7 @@ export default function MapComponent({
         const opts = [
           100, 50, 20, 10, 5, 2, 1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01,
         ];
-        const heuristicLimit =
-          viewDimensionWorld / GRID_TARGET_LINES_ON_SCREEN;
+        const heuristicLimit = viewDimensionWorld / GRID_TARGET_LINES_ON_SCREEN;
         for (let j = 0; j < opts.length - 1; j++) {
           const stepCandidate = opts[j] * scaleFactorSeed;
           if (stepCandidate < heuristicLimit && stepCandidate > 0) {
@@ -319,9 +342,7 @@ export default function MapComponent({
 
       const scaleFactorX = Math.pow(
         10,
-        Math.floor(
-          Math.log10(Math.max(currentGraphWorldWidth, Number.EPSILON))
-        )
+        Math.floor(Math.log10(Math.max(currentGraphWorldWidth, Number.EPSILON)))
       );
       const scaleFactorY = Math.pow(
         10,
@@ -356,9 +377,7 @@ export default function MapComponent({
         ctx.moveTo(screenPos[0], 0);
         ctx.lineTo(screenPos[0], canvasSize.height);
         ctx.lineWidth = isOriginLine ? 1.2 : 0.5;
-        ctx.strokeStyle = isOriginLine
-          ? "rgba(0,0,0,0.5)"
-          : "rgba(0,0,0,0.25)";
+        ctx.strokeStyle = isOriginLine ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.25)";
         ctx.stroke();
 
         if (
@@ -369,9 +388,7 @@ export default function MapComponent({
           textVal =
             precision(textVal) === 0
               ? Math.round(textVal)
-              : parseFloat(
-                  textVal.toFixed(Math.max(0, precision(xScale) + 1))
-                );
+              : parseFloat(textVal.toFixed(Math.max(0, precision(xScale) + 1)));
           if (Math.abs(textVal) < xScale / 10000 && textVal !== 0) continue;
           const textYPos = Math.min(
             Math.max(worldOriginScreen[1] + 15, 15),
@@ -397,9 +414,7 @@ export default function MapComponent({
         ctx.moveTo(0, screenPos[1]);
         ctx.lineTo(canvasSize.width, screenPos[1]);
         ctx.lineWidth = isOriginLine ? 1.2 : 0.5;
-        ctx.strokeStyle = isOriginLine
-          ? "rgba(0,0,0,0.5)"
-          : "rgba(0,0,0,0.25)";
+        ctx.strokeStyle = isOriginLine ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.25)";
         ctx.stroke();
 
         if (
@@ -410,9 +425,7 @@ export default function MapComponent({
           textVal =
             precision(textVal) === 0
               ? Math.round(textVal)
-              : parseFloat(
-                  textVal.toFixed(Math.max(0, precision(yScale) + 1))
-                );
+              : parseFloat(textVal.toFixed(Math.max(0, precision(yScale) + 1)));
           if (Math.abs(textVal) < yScale / 10000 && textVal !== 0) continue;
           let textAlign: CanvasTextAlign = "right";
           let textXPos = worldOriginScreen[0] - 7;
@@ -499,7 +512,12 @@ export default function MapComponent({
   );
 
   const drawPath = useCallback(
-    (ctx: CanvasRenderingContext2D, path: Path) => {
+    (
+      ctx: CanvasRenderingContext2D,
+      path: Path,
+      pulseRadius?: number,
+      pulseOpacity?: number
+    ) => {
       if (!path.enabled || path.path.length === 0) return;
 
       ctx.save();
@@ -531,7 +549,12 @@ export default function MapComponent({
         ctx.fillStyle = isLastPoint ? path.color || "red" : "blue";
         ctx.fill();
 
-        if (isLastPoint && pulseRadius > 0) {
+        if (
+          isLastPoint &&
+          pulseRadius !== undefined &&
+          pulseOpacity !== undefined &&
+          pulseRadius > 0
+        ) {
           ctx.beginPath();
           ctx.arc(screenX, screenY, pulseRadius, 0, 2 * Math.PI);
           ctx.strokeStyle = `rgba(255, 255, 255, ${pulseOpacity})`;
@@ -541,7 +564,7 @@ export default function MapComponent({
       });
       ctx.restore();
     },
-    [toScreenspace, pulseRadius, pulseOpacity]
+    [toScreenspace]
   );
 
   const drawText = useCallback(
@@ -561,64 +584,123 @@ export default function MapComponent({
     [toScreenspace]
   );
 
-const drawShape = useCallback(
-  (ctx: CanvasRenderingContext2D, shape: Shape) => {
-    if (!shape || !shape.location) return;
+  const drawShape = useCallback(
+    (ctx: CanvasRenderingContext2D, shape: Shape) => {
+      if (!shape || !shape.location) return;
 
-    ctx.save();
-    const [centerX, centerY] = toScreenspace(
-      shape.location.long,
-      shape.location.lat
-    );
+      ctx.save();
+      const [centerX, centerY] = toScreenspace(
+        shape.location.long,
+        shape.location.lat
+      );
 
-    const currentWorldWidth = worldBounds[1] - worldBounds[0];
-    const currentWorldHeight = worldBounds[3] - worldBounds[2];
+      const currentWorldWidth = worldBounds[1] - worldBounds[0];
+      const currentWorldHeight = worldBounds[3] - worldBounds[2];
 
-    const worldToScreenScaleX = canvasSize.width / currentWorldWidth;
-    const worldToScreenScaleY = canvasSize.height / currentWorldHeight;
+      const worldToScreenScaleX = canvasSize.width / currentWorldWidth;
+      const worldToScreenScaleY = canvasSize.height / currentWorldHeight;
 
-    const screenWidth = shape.width * worldToScreenScaleX;
-    const screenHeight = shape.height * worldToScreenScaleY;
+      const screenWidth = shape.width * worldToScreenScaleX;
+      const screenHeight = shape.height * worldToScreenScaleY;
 
-    ctx.translate(centerX, centerY);
-    ctx.rotate(shape.rotation);
+      ctx.translate(centerX, centerY);
+      ctx.rotate(shape.rotation);
 
-    ctx.beginPath();
+      ctx.beginPath();
 
-    if (shape.shape === "ellipse") ctx.ellipse(0, 0, screenWidth / 2, screenHeight / 2, 0, 0, 2 * Math.PI);
-    else if (shape.shape === "rectangle") ctx.rect(-screenWidth / 2, -screenHeight / 2, screenWidth, screenHeight);
+      if (shape.shape === "ellipse")
+        ctx.ellipse(0, 0, screenWidth / 2, screenHeight / 2, 0, 0, 2 * Math.PI);
+      else if (shape.shape === "rectangle")
+        ctx.rect(
+          -screenWidth / 2,
+          -screenHeight / 2,
+          screenWidth,
+          screenHeight
+        );
 
-    ctx.fillStyle = shape.color?.toString() || "green";
-    ctx.globalAlpha = 0.3;
-    ctx.fill();
+      ctx.fillStyle = shape.color?.toString() || "green";
+      ctx.globalAlpha = 0.3;
+      ctx.fill();
 
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = shape.color?.toString() || "green";
-    ctx.lineWidth = 3;
-    ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = shape.color?.toString() || "green";
+      ctx.lineWidth = 3;
+      ctx.stroke();
 
-    ctx.restore();
-  },
-  [toScreenspace, worldBounds, canvasSize]
-);
+      ctx.restore();
+    },
+    [toScreenspace, worldBounds, canvasSize]
+  );
+
+  const drawCanvas = useCallback(
+    (
+      pulseRadius?: number,
+      pulseOpacity?: number,
+      forceRedraw: boolean = false
+    ) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      if (forceRedraw) {
+        ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
+        drawImages(ctx);
+        if (doDrawGrid) drawGrid(ctx);
+        shapes.forEach((shape) => drawShape(ctx, shape));
+        texts.forEach((text) => drawText(ctx, text));
+      }
+
+      paths.forEach((path) => drawPath(ctx, path, pulseRadius, pulseOpacity));
+    },
+    [
+      drawImages,
+      drawGrid,
+      drawText,
+      drawPath,
+      drawShape,
+      doDrawGrid,
+      texts,
+      paths,
+      shapes,
+      canvasSize,
+    ]
+  );
 
   // Pulse animation effect
   useEffect(() => {
     if (paths.length === 0 || paths.every((p) => p.path.length === 0)) {
-      setPulseRadius(0);
-      setPulseOpacity(1);
+      pulseRadiusRef.current = 0;
+      pulseOpacityRef.current = 1;
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = undefined;
+      }
       return;
     }
 
-    const animatePulse = () => {
-      setPulseRadius((prevRadius) => {
-        let nextRadius = prevRadius + LAST_POINT_PULSE_SPEED;
-        if (nextRadius > LAST_POINT_PULSE_MAX_RADIUS) {
-          nextRadius = 0;
-        }
-        setPulseOpacity(1 - nextRadius / LAST_POINT_PULSE_MAX_RADIUS);
-        return nextRadius;
-      });
+    const animatePulse = (currentTime: number) => {
+      if (currentTime - lastDrawTimeRef.current < 16.67) {
+        animationFrameRef.current = requestAnimationFrame(animatePulse);
+        return;
+      }
+
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      let nextRadius = pulseRadiusRef.current + LAST_POINT_PULSE_SPEED;
+      if (nextRadius > LAST_POINT_PULSE_MAX_RADIUS) {
+        nextRadius = 0;
+      }
+      pulseRadiusRef.current = nextRadius;
+      pulseOpacityRef.current = 1 - nextRadius / LAST_POINT_PULSE_MAX_RADIUS;
+
+      ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
+      drawCanvas(pulseRadiusRef.current, pulseOpacityRef.current, true);
+
+      lastDrawTimeRef.current = currentTime;
       animationFrameRef.current = requestAnimationFrame(animatePulse);
     };
 
@@ -626,29 +708,18 @@ const drawShape = useCallback(
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = undefined;
       }
     };
-  }, [paths.length > 0 && paths.some((p) => p.path.length > 0)]); // Optimize dependency
+  }, [paths.length > 0 && paths.some((p) => p.path.length > 0), drawCanvas]);
 
-  // Main drawing effect with optimized dependencies
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, canvasSize.width, canvasSize.height);
-
-    drawImages(ctx);
-    if (doDrawGrid) drawGrid(ctx);
-    shapes.forEach((shape)=>drawShape(ctx,shape))
-    texts.forEach((text) => drawText(ctx, text));
-    paths.forEach((path) => drawPath(ctx, path));
+    if (animationFrameRef.current) return;
+    drawCanvas(pulseRadiusRef.current, pulseOpacityRef.current, true);
   }, [
     drawImages,
     drawGrid,
     drawText,
-    drawPath,
     drawShape,
     doDrawGrid,
     texts,
@@ -711,20 +782,21 @@ const drawShape = useCallback(
     };
   }, [handleWheel]);
 
-  // Optimized mouse event handlers
+  // Mouse event handlers
   const handleMouseDown = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (isMultiTouch) return; // Don't handle mouse if multi-touch is active
       setIsDragging(true);
       mouseStartRef.current = [event.clientX, event.clientY];
       initialScreenTargetOnDragRef.current = [...screenTarget];
       event.currentTarget.style.cursor = "grabbing";
     },
-    [screenTarget]
+    [screenTarget, isMultiTouch]
   );
 
   const handleMouseMove = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!isDragging) return;
+      if (!isDragging || isMultiTouch) return;
       const dx = event.clientX - mouseStartRef.current[0];
       const dy = event.clientY - mouseStartRef.current[1];
       const worldUnitsPerPixel = panSpeedFactor / zoomLog;
@@ -733,23 +805,163 @@ const drawShape = useCallback(
         initialScreenTargetOnDragRef.current[1] - dy * worldUnitsPerPixel,
       ]);
     },
-    [isDragging, zoomLog, panSpeedFactor]
+    [isDragging, zoomLog, panSpeedFactor, isMultiTouch]
   );
 
   const handleMouseUpOrLeave = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
-      if (isDragging) {
+      if (isDragging && !isMultiTouch) {
         setIsDragging(false);
         event.currentTarget.style.cursor = "grab";
       }
     },
-    [isDragging]
+    [isDragging, isMultiTouch]
+  );
+
+  // Touch event handlers
+  const handleTouchStart = useCallback(
+    (event: React.TouchEvent<HTMLCanvasElement>) => {
+      event.preventDefault();
+      const touches = event.touches;
+
+      if (touches.length === 1) {
+        // Single touch - start panning
+        setIsDragging(true);
+        setIsMultiTouch(false);
+        const touch = touches[0];
+        touchStartRef.current = [touch.clientX, touch.clientY];
+        setTouchStartScreenTarget([...screenTarget]);
+      } else if (touches.length === 2) {
+        // Multi-touch - start zooming
+        setIsMultiTouch(true);
+        setIsDragging(false);
+        const distance = getDistance(touches[0], touches[1]);
+        setLastTouchDistance(distance);
+        const center = getTouchCenter(touches[0], touches[1]);
+        lastTouchCenterRef.current = center;
+        setTouchStartScreenTarget([...screenTarget]);
+      }
+    },
+    [screenTarget]
+  );
+
+  const handleTouchMove = useCallback(
+    (event: React.TouchEvent<HTMLCanvasElement>) => {
+      event.preventDefault();
+      const touches = event.touches;
+
+      if (touches.length === 1 && isDragging && !isMultiTouch) {
+        // Single touch panning
+        const touch = touches[0];
+        const dx = touch.clientX - touchStartRef.current[0];
+        const dy = touch.clientY - touchStartRef.current[1];
+        const worldUnitsPerPixel = panSpeedFactor / zoomLog;
+
+        setScreenTarget([
+          touchStartScreenTarget[0] - dx * worldUnitsPerPixel,
+          touchStartScreenTarget[1] - dy * worldUnitsPerPixel,
+        ]);
+      } else if (touches.length === 2 && isMultiTouch) {
+        // Multi-touch zoom and pan
+        const currentDistance = getDistance(touches[0], touches[1]);
+        const currentCenter = getTouchCenter(touches[0], touches[1]);
+
+        // Handle zoom
+        if (lastTouchDistance > 0) {
+          const zoomFactor = currentDistance / lastTouchDistance;
+          const zoomAmount = Math.log2(zoomFactor) * 0.5; // Adjust sensitivity
+          const newZoom = Math.max(-7, Math.min(12, zoom + zoomAmount));
+
+          // Get canvas bounds for zoom-to-point calculation
+          const canvas = canvasRef.current;
+          if (canvas) {
+            const canvasRect = canvas.getBoundingClientRect();
+            const centerX = currentCenter[0] - canvasRect.left;
+            const centerY = currentCenter[1] - canvasRect.top;
+
+            const currentWorldWidth = worldBounds[1] - worldBounds[0];
+            const currentWorldHeight = worldBounds[3] - worldBounds[2];
+
+            const worldCenterXBeforeZoom =
+              worldBounds[0] + (centerX / canvasSize.width) * currentWorldWidth;
+            const worldCenterYBeforeZoom =
+              worldBounds[2] +
+              (centerY / canvasSize.height) * currentWorldHeight;
+
+            const newZoomLog = Math.pow(2, newZoom);
+            const normCenterX = centerX / canvasSize.width;
+            const normCenterY = centerY / canvasSize.height;
+
+            const newScreenTargetX =
+              worldCenterXBeforeZoom -
+              (initialBounds[0] +
+                (initialBounds[1] - initialBounds[0]) * normCenterX) /
+                newZoomLog;
+            const newScreenTargetY =
+              worldCenterYBeforeZoom -
+              (initialBounds[2] +
+                (initialBounds[3] - initialBounds[2]) * normCenterY) /
+                newZoomLog;
+
+            setZoom(newZoom);
+            setScreenTarget([newScreenTargetX, newScreenTargetY]);
+          }
+        }
+
+        // Handle pan during multi-touch
+        const centerDx = currentCenter[0] - lastTouchCenterRef.current[0];
+        const centerDy = currentCenter[1] - lastTouchCenterRef.current[1];
+        const worldUnitsPerPixel = panSpeedFactor / zoomLog;
+
+        setScreenTarget((prev) => [
+          prev[0] - centerDx * worldUnitsPerPixel,
+          prev[1] - centerDy * worldUnitsPerPixel,
+        ]);
+
+        setLastTouchDistance(currentDistance);
+        lastTouchCenterRef.current = currentCenter;
+      }
+    },
+    [
+      isDragging,
+      isMultiTouch,
+      touchStartScreenTarget,
+      lastTouchDistance,
+      zoom,
+      worldBounds,
+      canvasSize,
+      initialBounds,
+      zoomLog,
+      panSpeedFactor,
+    ]
+  );
+
+  const handleTouchEnd = useCallback(
+    (event: React.TouchEvent<HTMLCanvasElement>) => {
+      event.preventDefault();
+      const touches = event.touches;
+
+      if (touches.length === 0) {
+        // All touches ended
+        setIsDragging(false);
+        setIsMultiTouch(false);
+        setLastTouchDistance(0);
+      } else if (touches.length === 1 && isMultiTouch) {
+        // Went from multi-touch to single touch
+        setIsMultiTouch(false);
+        setIsDragging(true);
+        const touch = touches[0];
+        touchStartRef.current = [touch.clientX, touch.clientY];
+        setTouchStartScreenTarget([...screenTarget]);
+      }
+    },
+    [isMultiTouch, screenTarget]
   );
 
   // Global mouse up handler
   useEffect(() => {
     const handleGlobalMouseUp = () => {
-      if (isDragging) {
+      if (isDragging && !isMultiTouch) {
         setIsDragging(false);
         if (canvasRef.current) canvasRef.current.style.cursor = "grab";
       }
@@ -758,7 +970,21 @@ const drawShape = useCallback(
     return () => {
       window.removeEventListener("mouseup", handleGlobalMouseUp);
     };
-  }, [isDragging]);
+  }, [isDragging, isMultiTouch]);
+
+  // Handle window resize for mobile
+  useEffect(() => {
+    const handleResize = () => {
+      // Force a re-render on resize for mobile
+      if (typeof window !== "undefined" && window.innerWidth < 768) {
+        // This will trigger the canvasSize useMemo to recalculate
+        window.dispatchEvent(new Event("resize"));
+      }
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   return (
     <canvas
@@ -767,13 +993,17 @@ const drawShape = useCallback(
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUpOrLeave}
       onMouseLeave={handleMouseUpOrLeave}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
       style={{
         border: "1px solid black",
         cursor: "grab",
         touchAction: "none",
         backgroundColor: "#262b37",
         height: "100vh",
-        width: "100vh",
+        width: "100vw",
+        display: "block",
       }}
     />
   );
